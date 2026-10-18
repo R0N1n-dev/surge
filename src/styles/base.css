@@ -1,0 +1,338 @@
+/* ===========================================================================
+   Surge — base layer
+   Resets, typography primitives, layout helpers.
+   Depends on tokens from themes.css (--s-*).
+   =========================================================================== */
+
+/* ------------------------------------------------------- system-bar insets --
+   Android WebView reports env(safe-area-inset-*) as 0, so useSafeArea.js
+   overwrites these with measured values from SafeAreaPlugin. On iOS/desktop the
+   env() fallback is already correct. Everything fixed or sticky consumes these,
+   which is what keeps UI out of the status-bar / notification-pull area.      */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sak: 0px; /* on-screen keyboard */
+}
+
+/* ------------------------------------------------------------------ reset --- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Root font size drives the rem scale; users with large system fonts get a
+     proportional bump but we cap it so layouts never explode. */
+  font-size: clamp(15px, 100%, 18px);
+}
+
+body {
+  min-height: 100dvh;
+  font-family: var(--s-font-sans);
+  font-size: var(--s-body-medium-size);
+  line-height: var(--s-body-medium-line);
+  letter-spacing: var(--s-body-medium-tracking);
+  color: var(--s-on-surface);
+  background: var(--s-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+  /* Disable the iOS/WebView rubber-band glow; we implement our own overscroll. */
+  overscroll-behavior-y: contain;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+button {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+a {
+  color: var(--s-primary);
+  text-decoration: none;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+/* Long-press on Android WebView can trigger text selection / callouts inside
+   interactive rows. Kill it where it hurts, keep it on real text blocks. */
+button,
+[role='button'],
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+::selection {
+  background: var(--s-primary-container);
+  color: var(--s-on-primary-container);
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--s-primary);
+  outline-offset: 2px;
+  border-radius: var(--s-radius-xs);
+}
+
+/* ------------------------------------------------------------ scrollbars --- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--s-outline-variant) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--s-outline-variant);
+  border-radius: var(--s-radius-full);
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* --------------------------------------------------------- app safe area --- */
+
+.app-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  /* Android edge-to-edge insets, injected by the SafeArea plugin. */
+  /* Content starts strictly below the status bar and above the gesture zone.
+     The background still paints edge-to-edge behind both. */
+  padding-top: var(--sat);
+  padding-bottom: var(--sab);
+  padding-left: var(--sal);
+  padding-right: var(--sar);
+  background: var(--s-background);
+}
+
+.app-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  /* Room for the bottom nav + FAB + gesture zone so nothing hides behind them. */
+  padding-bottom: calc(var(--s-size-nav-bar) + 24px + var(--sab));
+  scroll-padding-top: var(--s-size-header-expanded);
+}
+
+.app-content {
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+  padding-inline: var(--s-space-4);
+}
+
+@media (min-width: 840px) {
+  .app-content {
+    max-width: 1040px;
+    padding-inline: var(--s-space-6);
+  }
+}
+
+/* -------------------------------------------------------------- type ramp --- */
+
+.t-display-large { font: var(--s-display-large-weight) var(--s-display-large-size)/var(--s-display-large-line) var(--s-font-sans); letter-spacing: var(--s-display-large-tracking); }
+.t-display-medium { font: var(--s-display-medium-weight) var(--s-display-medium-size)/var(--s-display-medium-line) var(--s-font-sans); letter-spacing: var(--s-display-medium-tracking); }
+.t-display-small { font: var(--s-display-small-weight) var(--s-display-small-size)/var(--s-display-small-line) var(--s-font-sans); letter-spacing: var(--s-display-small-tracking); }
+.t-headline-large { font: var(--s-headline-large-weight) var(--s-headline-large-size)/var(--s-headline-large-line) var(--s-font-sans); letter-spacing: var(--s-headline-large-tracking); }
+.t-headline-medium { font: var(--s-headline-medium-weight) var(--s-headline-medium-size)/var(--s-headline-medium-line) var(--s-font-sans); letter-spacing: var(--s-headline-medium-tracking); }
+.t-headline-small { font: var(--s-headline-small-weight) var(--s-headline-small-size)/var(--s-headline-small-line) var(--s-font-sans); letter-spacing: var(--s-headline-small-tracking); }
+.t-title-large { font: var(--s-title-large-weight) var(--s-title-large-size)/var(--s-title-large-line) var(--s-font-sans); letter-spacing: var(--s-title-large-tracking); }
+.t-title-medium { font: var(--s-title-medium-weight) var(--s-title-medium-size)/var(--s-title-medium-line) var(--s-font-sans); letter-spacing: var(--s-title-medium-tracking); }
+.t-title-small { font: var(--s-title-small-weight) var(--s-title-small-size)/var(--s-title-small-line) var(--s-font-sans); letter-spacing: var(--s-title-small-tracking); }
+.t-label-large { font: var(--s-label-large-weight) var(--s-label-large-size)/var(--s-label-large-line) var(--s-font-sans); letter-spacing: var(--s-label-large-tracking); }
+.t-label-medium { font: var(--s-label-medium-weight) var(--s-label-medium-size)/var(--s-label-medium-line) var(--s-font-sans); letter-spacing: var(--s-label-medium-tracking); }
+.t-label-small { font: var(--s-label-small-weight) var(--s-label-small-size)/var(--s-label-small-line) var(--s-font-sans); letter-spacing: var(--s-label-small-tracking); }
+.t-body-large { font: var(--s-body-large-weight) var(--s-body-large-size)/var(--s-body-large-line) var(--s-font-sans); letter-spacing: var(--s-body-large-tracking); }
+.t-body-medium { font: var(--s-body-medium-weight) var(--s-body-medium-size)/var(--s-body-medium-line) var(--s-font-sans); letter-spacing: var(--s-body-medium-tracking); }
+.t-body-small { font: var(--s-body-small-weight) var(--s-body-small-size)/var(--s-body-small-line) var(--s-font-sans); letter-spacing: var(--s-body-small-tracking); }
+
+/* Numerals in speed/size/ETA readouts must not jitter as they tick. */
+.t-mono-large { font: var(--s-mono-large-weight) var(--s-mono-large-size)/var(--s-mono-large-line) var(--s-font-mono); letter-spacing: var(--s-mono-large-tracking); font-variant-numeric: tabular-nums; }
+.t-mono-medium { font: var(--s-mono-medium-weight) var(--s-mono-medium-size)/var(--s-mono-medium-line) var(--s-font-mono); letter-spacing: var(--s-mono-medium-tracking); font-variant-numeric: tabular-nums; }
+.t-mono-small { font: var(--s-mono-small-weight) var(--s-mono-small-size)/var(--s-mono-small-line) var(--s-font-mono); letter-spacing: var(--s-mono-small-tracking); font-variant-numeric: tabular-nums; }
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------- utilities --- */
+
+.row { display: flex; align-items: center; }
+.row-between { display: flex; align-items: center; justify-content: space-between; }
+.col { display: flex; flex-direction: column; }
+.gap-1 { gap: var(--s-space-1); }
+.gap-2 { gap: var(--s-space-2); }
+.gap-3 { gap: var(--s-space-3); }
+.gap-4 { gap: var(--s-space-4); }
+.gap-5 { gap: var(--s-space-5); }
+.gap-6 { gap: var(--s-space-6); }
+.gap-7 { gap: var(--s-space-7); }
+.wrap { flex-wrap: wrap; }
+.grow { flex: 1 1 auto; min-width: 0; }
+.shrink-0 { flex: 0 0 auto; }
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.muted { color: var(--s-on-surface-variant); }
+.dim { color: var(--s-outline); }
+.center { text-align: center; }
+.right { text-align: right; }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --------------------------------------------------------------- a11y/motion */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --s-outline: var(--s-on-surface-variant);
+    --s-outline-variant: var(--s-on-surface-variant);
+  }
+}
+
+/* ===========================================================================
+   Overflow guards
+   ---------------------------------------------------------------------------
+   A download manager renders attacker-controlled strings: URLs, torrent names,
+   tracker hostnames, ID3 tags. Any one of them can be a 200-character token with
+   no break opportunity, and a single unbreakable run is enough to push a row
+   wider than the viewport and make the whole app pan sideways. These rules make
+   horizontal overflow structurally impossible rather than case-by-case.
+   =========================================================================== */
+
+html {
+  overflow-x: hidden;
+}
+
+/* Every text node can break; truncate-ellipsised ones still win where set. */
+body {
+  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.app-content,
+.app-content > * {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Grid/flex children that hold text must be allowed to shrink below content
+   width, otherwise `min-width:auto` reintroduces the overflow. */
+.dl__body,
+.dl__meta,
+.setting .col,
+.tree__row .col,
+.media-card__info,
+.discover__info,
+.sheet__head,
+.nav__item {
+  min-width: 0;
+}
+
+/* Monospace readouts (speeds, hashes, paths) are the usual offenders. */
+.t-mono-large,
+.t-mono-medium,
+.t-mono-small,
+.tree__size,
+.dl__numbers {
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+/* Long paths/URLs shown in full (detail rows) break at any character. */
+.wrap-any {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  white-space: normal;
+}

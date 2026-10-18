@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HTTPS everywhere. aria2's RPC is loopback-only and spoken over a raw socket
+  (not HTTP through the WebView), so it needs no cleartext exception here.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!--
+      aria2's JSON-RPC is a loopback-only plain-HTTP socket. The network security
+      config applies to OkHttp/HttpURLConnection app-wide, so without this block
+      EVERY rpc call throws "Cleartext HTTP traffic not permitted" and the queue
+      quietly never moves. Loopback is explicitly safe: it never leaves device.
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

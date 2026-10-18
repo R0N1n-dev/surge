@@ -1,0 +1,56 @@
+{
+  "name": "surge-downloader",
+  "version": "3.2.1",
+  "private": true,
+  "description": "Surge — a power-user Android download manager: YouTube, Instagram, torrents, magnets, HTTP and MP3 conversion.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tokens": "node tools/gen-css.mjs",
+    "tokens:check": "node tools/verify-tokens.mjs --strict",
+    "css:check": "node tools/verify-css.mjs --strict",
+    "mockup": "node mockup/build-mockup.mjs && node tools/verify-mockup.mjs --strict",
+    "icons": "python3 tools/gen-icons.py",
+    "verify": "npm run tokens:check && npm run css:check && node tools/verify-js.mjs --strict",
+    "cap:sync": "cap sync android && node tools/android-overlay.mjs",
+    "android:open": "cap open android",
+    "android:build": "cd android && ./gradlew :app:assembleDebug",
+    "android:bundle": "cd android && ./gradlew :app:bundleRelease",
+    "android:run": "cap run android",
+    "cap:add:android": "cap add android && node tools/android-overlay.mjs",
+    "android:prep": "node tools/android-overlay.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/browser": "^8.0.5",
+    "@capacitor/clipboard": "^8.0.1",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/network": "^8.0.1",
+    "@capacitor/preferences": "^8.0.1",
+    "@capacitor/share": "^8.0.3",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4",
+    "pinia": "^4.1.0",
+    "vue": "^3.5.44",
+    "vue-router": "^5.4.0",
+    "surge-native": "file:plugins/surge-native"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.3",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "vite": "^8.3.4"
+  },
+  "browserslist": [
+    "Chrome >= 90",
+    "Android >= 7"
+  ]
+}

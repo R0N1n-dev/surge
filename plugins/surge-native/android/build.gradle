@@ -1,0 +1,167 @@
+// Local Capacitor plugin module. Living OUTSIDE android/app is the point:
+// `npx/bunx cap add android` regenerates the app project and would wipe any
+// custom Kotlin placed there. cap sync includes this module automatically
+// (it is a file: dependency with a `capacitor.android.src`), and the
+// @CapacitorPlugin annotations below are what make the STOCK BridgeActivity
+// auto-register every plugin - no manual registerPlugin() anywhere.
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'com.chaquo.python'
+
+android {
+    namespace 'com.surge.downloader'
+    compileSdk 35
+
+    defaultConfig {
+        minSdk 24
+        targetSdk 35
+
+        // SPEC: arm64 only, for aria2/ffmpeg/CPython alike.
+        ndk { abiFilters 'arm64-v8a' }
+    }
+
+    // Embedded CPython 3.11 so yt-dlp runs on-device. Extracted lazily on first
+    // media use, never during bridge init (that used to hang the splash).
+    chaquopy {
+        defaultConfig {
+            // 3.8 has the widest wheel availability on Chaquopy; yt-dlp
+            // 2024.11.18 still supports it. 3.11 works but warns about gaps.
+            version '3.8'
+            pip {
+                // 2024.10.22 is the newest release Chaquopy's wheel index
+                // carries (its mirror lags PyPI); a newer pin fails resolution.
+                install 'yt-dlp==2024.10.22'
+                install 'mutagen'   // pure-python tag writing for the MP3 path
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+    kotlinOptions { jvmTarget = '21' }
+
+    buildFeatures { buildConfig true }
+
+    packagingOptions {
+        jniLibs {
+            // exec() of the extracted libaria2c.so requires legacy packaging.
+            useLegacyPackaging = true
+        }
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+// ---------------------------------------------------------------------------
+// Native engine coordinates, RESOLVED FROM MAVEN METADATA at configure time.
+//
+// Exact version pins cannot be verified from an offline authoring environment,
+// and dynamic versions mis-probe for AARs. So we read maven-metadata.xml from
+// repo1.maven.org directly and pin the newest release that actually exists
+// (cached 24h in build/surge-resolved-versions.properties). If the network or
+// the coordinate is unavailable we degrade: ffmpeg is reflective so it compiles
+// without the dep, and libtorrent swaps to the stub source set - the APK still
+// builds either way.
+// ---------------------------------------------------------------------------
+def surgeVersionsCache = new File(project.layout.buildDirectory.get().asFile, 'surge-resolved-versions.properties')
+
+def surgeMavenVersions = { String group, String artifact ->
+    try {
+        def url = "https://repo1.maven.org/maven2/${group.replace('.', '/')}/${artifact}/maven-metadata.xml".toURL()
+        def conn = url.openConnection()
+        conn.connectTimeout = 8000
+        conn.readTimeout = 8000
+        def txt = conn.inputStream.getText('UTF-8')
+        def m = (txt =~ /<version>([^<]+)<\/version>/)
+        def list = []
+        while (m.find()) list << m.group(1)
+        return list
+    } catch (Throwable ignored) {
+        return []
+    }
+}
+
+def surgePick = { String group, String artifact, String prefix, Map cached ->
+    if (cached.containsKey(artifact)) return cached[artifact] ?: null
+    def list = surgeMavenVersions(group, artifact)
+    def pool = prefix ? list.findAll { it.startsWith(prefix) && !it.contains('LTS') } : list
+    def pick = pool ? pool.last() : (list ? list.last() : null)
+    return pick
+}
+
+def surgeCached = [:]
+if (surgeVersionsCache.exists() && (System.currentTimeMillis() - surgeVersionsCache.lastModified()) < 24 * 3600 * 1000L) {
+    def pr = new Properties()
+    surgeVersionsCache.withInputStream { pr.load(it) }
+    pr.each { k, v -> surgeCached[k.toString()] = v.toString() }
+}
+
+def ffVer = surgePick('com.arthenica', 'ffmpeg-kit-full', '6.', surgeCached)
+def ltVer = surgePick('org.libtorrent4j', 'libtorrent4j', '', surgeCached)
+def ltArmVer = null
+if (ltVer) {
+    def armList = surgeMavenVersions('org.libtorrent4j', 'libtorrent4j-android-arm64')
+    ltArmVer = armList.contains(ltVer) ? ltVer : (armList ? armList.last() : null)
+}
+if (!surgeCached) {
+    surgeVersionsCache.parentFile.mkdirs()
+    def pr = new Properties()
+    if (ffVer) pr['ffmpeg-kit-full'] = ffVer
+    if (ltVer) pr['libtorrent4j'] = ltVer
+    if (ltArmVer) pr['libtorrent4j-android-arm64'] = ltArmVer
+    surgeVersionsCache.withOutputStream { pr.store(it, 'surge resolved engine versions') }
+}
+
+ext.surgeHasFfmpeg = ffVer != null
+ext.surgeHasTorrent = ltVer != null && ltArmVer != null
+
+println("Surge engines: ffmpeg-kit=${ffVer ?: 'UNRESOLVED (conversion disabled)'} libtorrent4j=${surgeHasTorrent ? ltVer : 'UNRESOLVED (torrents disabled)'}")
+
+android {
+    sourceSets {
+        main {
+            java.srcDirs += surgeHasTorrent
+                ? 'src/torrent-enabled/java'
+                : 'src/torrent-disabled/java'
+        }
+    }
+}
+
+dependencies {
+    if (ffVer) implementation "com.arthenica:ffmpeg-kit-full:${ffVer}"
+    if (surgeHasTorrent) {
+        implementation "org.libtorrent4j:libtorrent4j:${ltVer}"
+        implementation "org.libtorrent4j:libtorrent4j-android-arm64:${ltArmVer}"
+    }
+}
+
+afterEvaluate {
+    if (!surgeHasFfmpeg) println('Surge: ffmpeg-kit unresolved - MP3 conversion disabled in this build')
+    if (!surgeHasTorrent) println('Surge: libtorrent4j unresolved - torrents disabled in this build')
+}
+
+dependencies {
+    implementation project(':capacitor-android')
+
+    implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.palette:palette-ktx:1.0.0'
+    implementation 'androidx.documentfile:documentfile:1.0.1'
+    implementation 'androidx.work:work-runtime-ktx:2.10.0'
+    implementation 'androidx.lifecycle:lifecycle-service:2.8.7'
+    implementation 'androidx.datastore:datastore-preferences:1.1.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+    implementation 'com.squareup.moshi:moshi:1.15.1'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // The three engines, all resolved by Gradle - NO hand-dropped .so files:
+    //  · ffmpeg-kit ships its natives per-ABI from Maven (MP3 encode, mux, tags)
+    //  · libtorrent4j ships its arm64 JNI lib from Maven (magnets + .torrent)
+    //  · segmented HTTP is pure Kotlin/OkHttp in core/HttpEngine.kt
+
+}

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a4d61"/>
+      <stop offset="1" stop-color="#26283c"/>
+    </linearGradient>
+    <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f5f5f5"/>
+    </linearGradient>
+  </defs>
+  <rect width="108" height="108" fill="url(#bg)"/>
+  <!-- 66dp safe zone: 21..87. The bolt is drawn in the 100-unit design space
+       and mapped into that box, so no launcher mask can clip it. -->
+  <g transform="translate(21 21) scale(0.66)">
+    <polygon points="55.00,4.00 78.00,4.00 48.00,46.00 66.00,46.00 28.00,96.00 42.00,54.00 24.00,54.00" fill="url(#fg)"/>
+  </g>
+</svg>

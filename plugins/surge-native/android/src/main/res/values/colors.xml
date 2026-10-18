@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand_primary">#2d3047</color>
+    <color name="brand_secondary">#2ec4b6</color>
+    <color name="brand_accent">#ff7a59</color>
+    <color name="splash_background">#36aedd</color>
+    <color name="widget_background">#1B1C22</color>
+    <color name="notification_accent">#2ec4b6</color>
+</resources>

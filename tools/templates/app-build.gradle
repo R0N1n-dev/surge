@@ -1,0 +1,191 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+apply plugin: 'com.chaquo.python'
+
+android {
+    // Distinct from the surge-native plugin module's namespace (which owns the
+    // com.surge.downloader R/BuildConfig space). applicationId below stays
+    // com.surge.downloader - namespace only controls generated classes.
+    namespace 'com.surge.downloader.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.surge.downloader'
+        minSdk 24            // Android 7.0 — covers ~98% of active devices
+        targetSdk 35         // Android 15: foreground-service type rules apply
+        versionCode 30201
+        versionName '3.2.1'
+
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+
+        // SPEC: bundle aria2 (and every other native blob) for arm64 ONLY.
+        // Keeping a single ABI also halves APK size and removes the
+        // "wrong-ABI native lib" class of Play Store crashes entirely.
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+    }
+
+    // Chaquopy: embed CPython 3.11 so yt-dlp runs on-device with no server.
+    // arm64-v8a only, matching the abiFilters above.
+    chaquopy {
+        defaultConfig {
+            version '3.11'
+            pip {
+                install 'yt-dlp==2024.11.18'
+                install 'mutagen'      // tag writing for the MP3 pipeline
+                install 'brotli'       // required by yt-dlp for some extractors
+            }
+        }
+        productFlavors {}
+        buildTypes {}
+        pyc { src = false }   // ship .py, keeps tracebacks readable in the log
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix '.debug'
+            manifestPlaceholders = [appName: 'Surge (debug)']
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            manifestPlaceholders = [appName: 'Surge']
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+    kotlinOptions {
+        jvmTarget = '21'
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    // aria2 ships renamed to lib*.so so the loader extracts it with the
+    // executable bit honoured on Android 10+ (W^X: you cannot exec from the
+    // app data dir). We must NOT let the packager strip or compress it.
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true   // required for exec() of extracted libs
+            keepDebugSymbols += ['**/libaria2c.so', '**/libffmpeg.so', '**/libffprobe.so']
+        }
+        resources {
+            excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE*', 'META-INF/NOTICE*']
+        }
+    }
+
+    lint {
+        abortOnError true
+        // WebView-nested scroll and the custom gesture layer trip these two;
+        // both are intentional and reviewed.
+        disable 'UnusedIds'
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation project(':capacitor-android')
+
+    implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.palette:palette-ktx:1.0.0'
+
+    // Foreground service + scheduler that survives Doze.
+    implementation 'androidx.work:work-runtime-ktx:2.10.0'
+    implementation 'androidx.lifecycle:lifecycle-service:2.8.7'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+
+    // DataStore for settings; Glance-free classic RemoteViews widget.
+    implementation 'androidx.datastore:datastore-preferences:1.1.1'
+
+    // Coroutines for the RPC loop that talks to aria2.
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+
+    // JSON for the aria2 JSON-RPC wire format.
+    implementation 'com.squareup.moshi:moshi:1.15.1'
+    implementation 'com.squareup.moshi:moshi-kotlin:1.15.1'
+
+    // OkHttp drives both the JSON-RPC socket and any plain-HTTP fallback path.
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+}
+
+// ---------------------------------------------------------------------------
+// Registration belts, at GRADLE level (npm scripts are not a guarantee).
+//  · merge our 7 plugin classpaths into assets/capacitor.plugins.json (the
+//    bridge auto-registers from it; cap sync rewrites it, so re-merge pre-build)
+//  · restore the MainActivity that registerPlugin()s all seven, in case a
+//    `cap add android` overwrote it with the stock activity
+// Both are idempotent and run before every build.
+// ---------------------------------------------------------------------------
+tasks.register('surgeMergePluginsJson') {
+    def target = file('src/main/assets/capacitor.plugins.json')
+    inputs.file(target).optional()
+    outputs.file(target)
+    doLast {
+        def classes = [
+            'com.surge.downloader.plugins.DownloaderPlugin',
+            'com.surge.downloader.plugins.TorrentPlugin',
+            'com.surge.downloader.plugins.MediaPlugin',
+            'com.surge.downloader.plugins.StoragePlugin',
+            'com.surge.downloader.plugins.WidgetPlugin',
+            'com.surge.downloader.plugins.NotifierPlugin',
+            'com.surge.downloader.plugins.SafeAreaPlugin',
+        ]
+        def list = []
+        if (target.exists()) {
+            try { list = new groovy.json.JsonSlurper().parse(target) as List } catch (e) { list = [] }
+        }
+        def have = list.collect { it.classpath } as Set
+        def added = 0
+        classes.each { c ->
+            if (!have.contains(c)) { list << [pkg: 'surge-native', classpath: c]; added++ }
+        }
+        if (added) {
+            target.parentFile.mkdirs()
+            target.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(list))
+            println("Surge: merged ${added} plugin classpath(s) into capacitor.plugins.json")
+        }
+    }
+}
+
+tasks.register('surgeRestoreMainActivity', Copy) {
+    def tpl = file("${rootProject.projectDir.parentFile}/tools/templates/MainActivity.kt")
+    def dst = file('src/main/java/com/surge/downloader/MainActivity.kt')
+    from(tpl.parentFile) { include tpl.name; rename { 'MainActivity.kt' } }
+    into dst.parentFile
+    onlyIf { tpl.exists() && (!dst.exists() || dst.text != tpl.text) }
+    doFirst { println('Surge: restored MainActivity (plugin registration)') }
+}
+
+preBuild.dependsOn 'surgeMergePluginsJson', 'surgeRestoreMainActivity'
+
+// The generated file that puts every Capacitor plugin module (including
+// :surge-native) on this module's compile classpath. The stock template applies
+// it; an earlier maintained copy of this file dropped the line, which made the
+// app module unable to SEE the plugin classes ("unresolved reference").
+if (file('capacitor.build.gradle').exists()) {
+    apply from: 'capacitor.build.gradle'
+}
+
+dependencies {
+    // Belt: even if a future cap sync omits the local plugin from
+    // capacitor.build.gradle, the app must always compile against it.
+    if (rootProject.findProject(':surge-native') != null) {
+        implementation project(':surge-native')
+    }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "surge-native",
+  "version": "3.2.1",
+  "description": "Surge's native engine: aria2 daemon, yt-dlp (Chaquopy), ffmpeg, MediaStore sink, widget, notifications, safe-area insets.",
+  "main": "dist/plugin.js",
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  },
+  "files": [
+    "android/",
+    "package.json"
+  ],
+  "keywords": [
+    "capacitor",
+    "plugin",
+    "native",
+    "android",
+    "downloader",
+    "aria2",
+    "yt-dlp"
+  ],
+  "license": "UNLICENSED",
+  "private": true
+}

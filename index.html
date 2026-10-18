@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en" class="theme-bright-tech mode-dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#12131a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="description" content="Surge — download YouTube, Instagram, torrents, magnets and plain files. Accelerated, resumable, and convertible to MP3." />
+
+    <title>Surge</title>
+
+    <!--
+      Pre-hydration bootstrap.
+      Stamps the persisted theme classes AND the boot background colour onto
+      <html> before any CSS/JS loads, so the first frame matches the native
+      splash in both modes. A dark flash on a light theme (or vice-versa) reads
+      as a bug even when everything else works.
+    -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('surge.settings');
+          var theme = 'bright-tech';
+          var mode = 'dark';
+          if (raw) {
+            var s = JSON.parse(raw);
+            if (s.theme) theme = s.theme;
+            if (s.mode) mode = s.mode;
+          }
+          var dark =
+            mode === 'dark' ||
+            (mode === 'system' &&
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var el = document.documentElement;
+          el.className = 'theme-' + theme + ' mode-' + (dark ? 'dark' : 'light');
+          el.style.setProperty('--boot-bg', dark ? '#12131a' : '#f7f8fb');
+          el.style.setProperty('--boot-fg', dark ? '#8fe3d9' : '#2d3047');
+        } catch (e) {
+          document.documentElement.style.setProperty('--boot-bg', '#12131a');
+          document.documentElement.style.setProperty('--boot-fg', '#8fe3d9');
+        }
+      })();
+
+      /*
+        Boot watchdog. If the module bundle never executes (old WebView, a bad
+        chunk, a plugin throwing at import time) the user would otherwise stare
+        at an empty coloured screen forever. Surface a readable, actionable
+        message instead of silence — a black screen is the worst possible
+        failure mode because it tells nobody anything.
+      */
+      window.__surgeBooted = false;
+
+      function reveal(detail) {
+        var host = document.getElementById('boot-error');
+        if (!host || host.hidden === false) return;
+        host.hidden = false;
+        var msg = document.getElementById('boot-error-msg');
+        if (msg) msg.textContent = detail || 'Unknown start-up failure.';
+        var shell = document.getElementById('boot');
+        if (shell) shell.classList.add('is-done');
+      }
+      window.__surgeReveal = reveal;
+
+      window.addEventListener('error', function (e) {
+        window.__surgeBootError = (e.message || 'script error') + ' @ ' + (e.filename || '') + ':' + (e.lineno || 0);
+        if (!window.__surgeBooted) reveal(window.__surgeBootError);
+      });
+      // A rejected promise in the boot path is just as fatal as a throw.
+      window.addEventListener('unhandledrejection', function (e) {
+        window.__surgeBootError = 'promise: ' + ((e.reason && e.reason.message) || e.reason);
+        if (!window.__surgeBooted) reveal(window.__surgeBootError);
+      });
+
+      // Case 1: bundle never executed at all.
+      setTimeout(function () {
+        if (!window.__surgeBooted) reveal(window.__surgeBootError || 'The interface failed to start. WebView may be out of date.');
+      }, 4000);
+
+      // Case 2: Vue mounted but rendered nothing (a route chunk 404'd, router
+      // guard threw). Boot flag is set, shell is gone, screen is empty.
+      setTimeout(function () {
+        var app = document.getElementById('app');
+        if (window.__surgeBooted && app && app.children.length === 0) {
+          reveal('The app mounted but rendered no screen. ' + (window.__surgeBootError || ''));
+        }
+      }, 6000);
+    </script>
+
+    <style>
+      /* Boot shell: covers HTML-parse → Vue-mount. Uses the mode-correct
+         colour from the bootstrap, never a hard-coded black. */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--boot-bg, #12131a);
+      }
+      #boot {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: var(--boot-bg, #12131a);
+        transition: opacity 240ms ease;
+      }
+      #boot.is-done { opacity: 0; pointer-events: none; }
+      #boot svg { width: 44px; height: 44px; fill: var(--boot-fg, #8fe3d9); opacity: 0.9; }
+      #boot-error {
+        position: fixed;
+        inset: auto 20px 28px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: rgb(255 255 255 / 0.08);
+        color: var(--boot-fg, #8fe3d9);
+        font: 500 13px/1.5 system-ui, sans-serif;
+        backdrop-filter: blur(10px);
+      }
+      #boot-error b { display: block; margin-bottom: 4px; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <!-- Visible-only-if-stuck boot indicator (the same bolt as the launcher). -->
+    <div id="boot" aria-hidden="true">
+      <svg viewBox="0 0 100 100"><polygon points="55,4 78,4 48,46 66,46 28,96 42,54 24,54" /></svg>
+    </div>
+
+    <div id="boot-error" hidden role="alert">
+      <b>Surge could not start</b>
+      <span id="boot-error-msg"></span>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+    <script nomodule>
+      document.getElementById('boot-error').hidden = false;
+      document.getElementById('boot-error-msg').textContent =
+        'This Android System WebView is too old for Surge. Update it in the Play Store, then reopen.';
+      var shell = document.getElementById('boot');
+      if (shell) shell.classList.add('is-done');
+    </script>
+  </body>
+</html>

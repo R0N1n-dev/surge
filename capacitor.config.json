@@ -1,0 +1,32 @@
+{
+  "appId": "com.surge.downloader",
+  "appName": "Surge",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false,
+    "backgroundColor": "#0f1013"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 900,
+      "launchAutoHide": true,
+      "backgroundColor": "#0f1013",
+      "androidSplashResourceName": "splash",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": true
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0f1013",
+      "overlaysWebView": true
+    }
+  },
+  "server": {
+    "androidScheme": "https",
+    "cleartext": false
+  }
+}

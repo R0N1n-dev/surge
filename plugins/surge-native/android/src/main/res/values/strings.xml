@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Surge</string>
+    <string name="share_action">Download with Surge</string>
+    <string name="widget_label">Surge downloads</string>
+    <string name="widget_desc">Live download speed, queue state and quick controls.</string>
+    <string name="widget_idle">All downloads complete</string>
+    <string name="widget_pause">Pause all downloads</string>
+    <string name="widget_add">New download</string>
+</resources>

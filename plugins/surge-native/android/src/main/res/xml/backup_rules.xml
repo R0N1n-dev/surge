@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include domain="sharedpref" path="." />
+    <include domain="database" path="." />
+    <!-- Never back up in-flight bytes or the aria2 session (it holds tokens). -->
+    <exclude domain="file" path="downloads/" />
+    <exclude domain="file" path="session.txt" />
+</full-backup-content>
