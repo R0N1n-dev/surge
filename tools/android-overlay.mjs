@@ -137,24 +137,56 @@ if (existsSync(GRADLE)) {
 
   const ROOT_GRADLE = join(ROOT, 'android/build.gradle');
   if (existsSync(ROOT_GRADLE)) {
-    const before = readFileSync(ROOT_GRADLE, 'utf8');
-    const m = /com\.android\.tools\.build:gradle:([\d.]+)/.exec(before);
+    let g = readFileSync(ROOT_GRADLE, 'utf8');
+    const before = g;
+
+    // --- AGP: must be >= 8.13 for compileSdk 36 ---------------------------
+    const m = /com\.android\.tools\.build:gradle:([\d.]+)/.exec(g);
     const want = [8, 13, 0];
     const have = m ? m[1].split('.').map(Number) : null;
-    const older =
-      !have ||
-      have[0] < want[0] ||
-      (have[0] === want[0] && have[1] < want[1]);
-    if (older) {
-      const after = m
-        ? before.replace(m[0], `com.android.tools.build:gradle:${want.join('.')}`)
-        : before.replace(
+    const agpOlder = !have || have[0] < want[0] || (have[0] === want[0] && have[1] < want[1]);
+    if (agpOlder) {
+      g = m
+        ? g.replace(m[0], `com.android.tools.build:gradle:${want.join('.')}`)
+        : g.replace(
             /dependencies\s*\{/,
             `dependencies {\n        classpath 'com.android.tools.build:gradle:${want.join('.')}'`,
           );
-      writeFileSync(ROOT_GRADLE, after, 'utf8');
-      patched++;
       console.log(`  patched        android/build.gradle (AGP ${m ? m[1] : 'missing'} -> ${want.join('.')})`);
+    }
+
+    // --- the plugins our own modules apply --------------------------------
+    // `plugins/surge-native/android/build.gradle` does
+    //     apply plugin: 'kotlin-android'
+    //     apply plugin: 'com.chaquo.python'
+    // and `tools/templates/app-build.gradle` does the same. Neither is on the
+    // Capacitor template's buildscript classpath, so a regenerated android/
+    // folder dies at
+    //     Plugin with id 'kotlin-android' not found
+    // followed by a misleading
+    //     project ':surge-native' does not specify `compileSdk` in build.gradle
+    // (evaluation aborts at the plugin line, before the android { } block runs).
+    // Declare them, and never touch a pin that is already present.
+    const REQUIRED = [
+      ['org.jetbrains.kotlin:kotlin-gradle-plugin', '2.2.21'],
+      ['com.chaquo.python:gradle', '17.1.0'],
+    ];
+    for (const [coord, version] of REQUIRED) {
+      if (g.includes(`${coord}:`)) continue;
+      const bs = g.indexOf('buildscript');
+      const deps = bs < 0 ? -1 : g.indexOf('dependencies', bs);
+      const brace = deps < 0 ? -1 : g.indexOf('{', deps);
+      const line = `\n        classpath '${coord}:${version}'`;
+      g =
+        brace >= 0
+          ? g.slice(0, brace + 1) + line + g.slice(brace + 1)
+          : `buildscript {\n    repositories {\n        google()\n        mavenCentral()\n    }\n    dependencies {${line}\n    }\n}\n\n${g}`;
+      console.log(`  patched        android/build.gradle (+ classpath ${coord}:${version})`);
+    }
+
+    if (g !== before) {
+      writeFileSync(ROOT_GRADLE, g, 'utf8');
+      patched++;
     }
   }
 }

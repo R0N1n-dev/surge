@@ -89,7 +89,7 @@ export const useDownloadsStore = defineStore('downloads', () => {
 
   /** Batch operate on the current selection, then clear it. */
   async function batch(action) {
-    const ids = [...ui.selection.value];
+    const ids = ui.selectedIds();
     for (const id of ids) {
       if (action === 'pause') await bridge.pause(id);
       if (action === 'resume') await bridge.resume(id);

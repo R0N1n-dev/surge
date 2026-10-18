@@ -69,8 +69,14 @@ async function boot() {
   // Surface it, keep the app alive.
   app.config.errorHandler = (err, _vm, info) => {
     console.error('[surge]', info, err);
+    // Name the failure in the toast. A bare "something went wrong" is
+    // undiagnosable from a screenshot; the queue genuinely is untouched.
+    const detail = err?.message ?? String(err);
     import('./stores/ui.js').then(({ useUiStore }) => {
-      useUiStore().show('Something went wrong — the queue is safe.', { tone: 'error' });
+      useUiStore().show(`Something went wrong — the queue is safe. (${detail})`, {
+        tone: 'error',
+        duration: 6000,
+      });
     });
   };
 

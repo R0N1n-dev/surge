@@ -73,6 +73,7 @@ python3 tools/gen-icons.py --theme cyber-contrast --mode light
 npm run tokens:check    # 468 WCAG contrast checks across 18 palette×mode sets
 npm run css:check       # every var(--s-*) used is actually defined
 npm run android:check   # compileSdk/targetSdk 36 + AGP pin + overlay normalisation
+npm run stores:check    # constructs every Pinia store; 31 runtime assertions
 node tools/verify-mockup.mjs --strict   # tag balance, class coverage, sprite refs
 node tools/verify-js.mjs --strict       # syntax, imports, templates, icons,
                                         #   + WebView-compat gate (no Chrome 92+

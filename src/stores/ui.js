@@ -67,6 +67,13 @@ export const useUiStore = defineStore('ui', () => {
   }
 
   /* ---------------------------------------------------------- selection ---- */
+  /**
+   * Pinia setup-stores UNWRAP refs on the store instance, so `store.selection`
+   * is already the Set — never `store.selection.value`. Reaching for `.value`
+   * yields `undefined`, which made `[...ids]` throw inside batch() and `.has()`
+   * throw on every card render; both surfaced to the user as the generic
+   * "Something went wrong — the queue is safe." error toast.
+   */
   const selection = ref(new Set());
   const selecting = computed(() => selection.value.size > 0);
 
@@ -75,6 +82,10 @@ export const useUiStore = defineStore('ui', () => {
     if (next.has(id)) next.delete(id);
     else next.add(id);
     selection.value = next;
+  }
+  /** The Set itself — `store.selection` is unwrapped, never `.selection.value`. */
+  function selectedIds() {
+    return [...selection.value];
   }
   function selectAll(ids) {
     selection.value = new Set(ids);
@@ -104,6 +115,7 @@ export const useUiStore = defineStore('ui', () => {
     toggleSelect,
     selectAll,
     clearSelection,
+    selectedIds,
     fabOpen,
     filter,
     viewMode,

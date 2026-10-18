@@ -277,6 +277,141 @@ for (const file of KTSRC) {
   }
 }
 
+/* -------------------------------- 11. bridge + pinia contracts ------------ */
+/**
+ * Two runtime contracts no compiler checks, and both have already shipped a
+ * crash that surfaced to users as a generic "Something went wrong" toast.
+ *
+ *  1. Every `bridge.x()` a view calls must exist on the bridge object. A typo
+ *     is a TypeError on the first click, not a build error.
+ *
+ *  2. Pinia setup-stores UNWRAP refs, so `store.selection` is the Set itself.
+ *     Writing `store.selection.value` yields undefined — `[...undefined]` and
+ *     `.has()` then throw during render.
+ */
+{
+  const bridgeFile = resolve(ROOT, 'src/lib/native.js');
+  if (existsSync(bridgeFile)) {
+    const text = readFileSync(bridgeFile, 'utf8');
+    const start = text.indexOf('export const bridge = {');
+    const body = start < 0 ? '' : text.slice(start);
+    const methods = new Set();
+    for (const line of body.split('\n')) {
+      const t = line.trim();
+      const async = t.startsWith('async ') ? t.slice(6) : t;
+      const paren = async.indexOf('(');
+      if (paren > 0 && (t.startsWith('async ') || t.includes('('))) {
+        const name = async.slice(0, paren).trim();
+        if (name && name !== 'export' && !name.includes(' ')) methods.add(name);
+      }
+    }
+    for (const file of SRC) {
+      const rel = relative(ROOT, file);
+      // Only app code: tools/ contains these very needles.
+      if (!rel.startsWith('src/') || rel === 'src/lib/native.js') continue;
+      for (const line of readFileSync(file, 'utf8').split('\n')) {
+        let idx = 0;
+        while ((idx = line.indexOf('bridge.', idx)) >= 0) {
+          idx += 7;
+          let name = '';
+          while (idx < line.length && /[A-Za-z0-9_$]/.test(line[idx])) name += line[idx++];
+          if (name && !methods.has(name)) {
+            problems.push(`BRIDGE ${rel}: bridge.${name}() is not implemented in lib/native.js`);
+          }
+        }
+      }
+    }
+  }
+
+  const storesDir = join(ROOT, 'src/stores');
+  if (existsSync(storesDir)) {
+    /**
+     * Collect, per store: the `defineStore` id, the hook that creates it, and
+     * the names it returns that are backed by ref()/computed() — those are the
+     * ones Pinia unwraps on the store instance.
+     */
+    const propsByStore = new Map();
+    const hookToStore = new Map();
+    for (const f of readdirSync(storesDir)) {
+      if (!f.endsWith('.js')) continue;
+      const text = readFileSync(join(storesDir, f), 'utf8');
+      const refs = new Set();
+      for (const line of text.split('\n')) {
+        const t = line.trim();
+        for (const kw of ['const ', 'let ']) {
+          if (!t.startsWith(kw)) continue;
+          const rest = t.slice(kw.length);
+          const eq = rest.indexOf(' = ');
+          if (eq < 0) continue;
+          const rhs = rest.slice(eq + 3);
+          if (rhs.startsWith('ref(') || rhs.startsWith('computed(')) refs.add(rest.slice(0, eq).trim());
+        }
+      }
+      const ret = text.lastIndexOf('return {');
+      if (ret < 0) continue;
+      const props = new Set();
+      for (const line of text.slice(ret).split('\n')) {
+        let t = line.trim();
+        if (t.endsWith(',')) t = t.slice(0, -1);
+        if (!t || t === 'return {' || t === '};') continue;
+        if (t.includes(':') || t.includes('(') || t.includes(' ') || t.includes('{') || t.includes('}')) continue;
+        if (refs.has(t)) props.add(t);
+      }
+      // `export const useUiStore = defineStore('ui', () => {`
+      const cAt = text.indexOf('export const ');
+      const eqAt = cAt < 0 ? -1 : text.indexOf(' =', cAt);
+      const hook = cAt < 0 || eqAt < 0 ? '' : text.slice(cAt + 13, eqAt).trim();
+      const dAt = text.indexOf('defineStore(');
+      const q1 = dAt < 0 ? -1 : text.indexOf(String.fromCharCode(39), dAt);
+      const q2 = q1 < 0 ? -1 : text.indexOf(String.fromCharCode(39), q1 + 1);
+      const id = q2 > q1 ? text.slice(q1 + 1, q2) : hook;
+      if (hook) hookToStore.set(hook, id);
+      propsByStore.set(id, props);
+    }
+
+    const IDENT_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_$';
+    /**
+     * Index of `needle` where it is not merely a prefix of a longer name.
+     * `ui.selection.value.has(…)` matches (`.` is not an identifier char), while
+     * `state.items.values()` does not (trailing `s`).
+     */
+    const exact = (text, needle) => {
+      let i = text.indexOf(needle);
+      while (i >= 0) {
+        const after = text[i + needle.length];
+        if (after === undefined || !IDENT_CHARS.includes(after)) return i;
+        i = text.indexOf(needle, i + 1);
+      }
+      return -1;
+    };
+
+    for (const file of SRC) {
+      const rel = relative(ROOT, file);
+      if (!rel.startsWith('src/') || rel.startsWith('src/stores/')) continue;
+      const text = readFileSync(file, 'utf8');
+      const bindings = new Map(); // local var -> store id
+      for (const line of text.split('\n')) {
+        const t = line.trim();
+        if (!t.startsWith('const ')) continue;
+        const eq = t.indexOf(' = ');
+        if (eq < 0) continue;
+        const rhs = t.slice(eq + 3).trim();
+        const paren = rhs.indexOf('(');
+        const hook = paren > 0 ? rhs.slice(0, paren) : '';
+        if (hookToStore.has(hook)) bindings.set(t.slice(6, eq).trim(), hookToStore.get(hook));
+      }
+      for (const [name, id] of bindings) {
+        for (const prop of propsByStore.get(id) ?? []) {
+          const needle = `${name}.${prop}.value`;
+          if (exact(text, needle) >= 0) {
+            problems.push(`PINIA ${rel}: '${needle}' — setup-store refs are unwrapped (stores/${id}.js); drop the .value`);
+          }
+        }
+      }
+    }
+  }
+}
+
 /* ---------------------------------------------------------------- report --- */
 
 console.log('Surge source audit');

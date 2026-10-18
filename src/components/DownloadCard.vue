@@ -70,7 +70,7 @@ const metaLine = computed(() => {
   return bits.join(' · ');
 });
 
-const selected = computed(() => ui.selection.value.has(props.item.id));
+const selected = computed(() => ui.selection.has(props.item.id));
 
 /* ----------------------------------------------------------- gestures ------ */
 

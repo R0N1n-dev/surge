@@ -26,7 +26,10 @@ let pulling = false;
 const pull = { el: null };
 
 function onTouchStart(e) {
-  const el = e.target.closest('.app-main');
+  // e.target is not guaranteed to be an Element (and may be null on some
+  // synthetic touches); a bare .closest() here threw inside the global handler
+  // and produced the generic "Something went wrong" toast on a stray tap.
+  const el = e.target?.closest?.('.app-main');
   if (!el || el.scrollTop > 0) return;
   startY = e.touches[0].clientY;
   pull.el = el;

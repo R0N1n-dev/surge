@@ -150,6 +150,57 @@ if (!existsSync(resolve(ROOT, OVERLAY))) {
   }
 }
 
+/* --------------- 2c. every applied plugin has a classpath ----------------- */
+/**
+ * The failure this guards: `plugins/surge-native/android/build.gradle` (and the
+ * app template) do `apply plugin: 'kotlin-android'` / `'com.chaquo.python'`,
+ * neither of which is on the Capacitor template's buildscript classpath. A
+ * regenerated android/ project then dies with
+ *
+ *   A problem occurred evaluating project ':surge-native'.
+ *   > Plugin with id 'kotlin-android' not found
+ *
+ * and, because script evaluation aborts before the `android { }` block runs, a
+ * misleading follow-up:
+ *
+ *   project ':surge-native' does not specify `compileSdk` in build.gradle
+ *
+ * So: every plugin our modules apply must be backed by a classpath the overlay
+ * guarantees.
+ */
+{
+  const CLASS_FOR = {
+    'kotlin-android': 'org.jetbrains.kotlin:kotlin-gradle-plugin',
+    'com.chaquo.python': 'com.chaquo.python:gradle',
+    'com.android.application': 'com.android.tools.build:gradle',
+    'com.android.library': 'com.android.tools.build:gradle',
+  };
+
+  const applied = new Set();
+  for (const rel of MODULES) {
+    if (!existsSync(resolve(ROOT, rel))) continue;
+    for (const line of read(rel).split('\n')) {
+      const at = line.indexOf('apply plugin:');
+      if (at < 0) continue;
+      const open = line.indexOf(String.fromCharCode(39), at);
+      const close = open < 0 ? -1 : line.indexOf(String.fromCharCode(39), open + 1);
+      if (close > open) applied.add(line.slice(open + 1, close));
+    }
+  }
+
+  const overlaySrc = existsSync(resolve(ROOT, OVERLAY)) ? read(OVERLAY) : '';
+  for (const id of applied) {
+    const coord = CLASS_FOR[id];
+    if (!coord) {
+      problems.push(`${OVERLAY}: plugin '${id}' is applied by a module but this audit does not know its classpath`);
+      continue;
+    }
+    if (!overlaySrc.includes(coord)) {
+      problems.push(`plugin '${id}' is applied but '${coord}' is never declared — "Plugin with id '${id}' not found"`);
+    }
+  }
+}
+
 /* --------------------------- 3. no stale 35 claims ------------------------ */
 
 const CLAIM_FILES = ['README.md', 'src/views/SettingsView.vue', 'mockup/build-mockup.mjs'];
