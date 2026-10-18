@@ -1695,7 +1695,7 @@ ${sprite()}
       <span>9 palettes × light/dark = 18 token sets</span>
       <span>${Object.keys(ICONS).length} hand-drawn icons</span>
       <span>468 WCAG contrast checks passing</span>
-      <span>minSdk 24 · targetSdk 35 · JDK 21</span>
+      <span>minSdk 24 · targetSdk 36 · JDK 21</span>
     </div>
   </header>
 

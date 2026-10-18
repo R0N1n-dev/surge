@@ -24,10 +24,19 @@ faithful preview, not a drawing. Regenerate with `npm run mockup`.
 
 | Tool     | Version | Why                                                     |
 | -------- | ------- | ------------------------------------------------------- |
-| JDK      | **21**  | per spec; AGP 8.7 runs on it and targets `compileSdk 35` |
+| JDK      | **21**  | per spec; AGP 8.13 runs on it and targets `compileSdk 36` |
 | Node     | ≥ 20    | Vite 6                                                    |
-| Android SDK | 35   | targetSdk 35                                              |
+| Android SDK | 36   | compileSdk/targetSdk 36 (Capacitor 8 baseline)             |
 | Python   | 3.11    | only for `tools/gen-icons.py` (asset generation)          |
+
+> **Android SDK Platform 36 is required.** Capacitor 8 is an API 36 stack, and
+> the androidx libraries it pulls in (`androidx.browser:1.9.0`,
+> `androidx.core:1.17.0`) publish AAR metadata that refuses to build unless the
+> consumer compiles against API 36 — a project still on 35 dies at
+> `:app:checkDebugAarMetadata`. Install **SDK Platform 36** in the SDK Manager;
+> `npm run android:prep` pins `compileSdkVersion`/`targetSdkVersion` (36) and the
+> Android Gradle Plugin (8.13) in the generated `android/` folder for you, and
+> `npm run android:check` fails if they drift back.
 
 No TypeScript anywhere. Plain JavaScript + Vue SFCs.
 
@@ -63,6 +72,7 @@ python3 tools/gen-icons.py --theme cyber-contrast --mode light
 ```bash
 npm run tokens:check    # 468 WCAG contrast checks across 18 palette×mode sets
 npm run css:check       # every var(--s-*) used is actually defined
+npm run android:check   # compileSdk/targetSdk 36 + AGP pin + overlay normalisation
 node tools/verify-mockup.mjs --strict   # tag balance, class coverage, sprite refs
 node tools/verify-js.mjs --strict       # syntax, imports, templates, icons,
                                         #   + WebView-compat gate (no Chrome 92+

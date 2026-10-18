@@ -137,7 +137,7 @@ const prefs = reactive({
       </section>
 
       <div class="col gap-2" style="align-items: center; padding-block: 8px">
-        <span class="t-body-small muted">Surge 3.2.1 (arm64) · JDK 21 · targetSdk 35</span>
+        <span class="t-body-small muted">Surge 3.2.1 (arm64) · JDK 21 · targetSdk 36</span>
         <span class="t-body-small muted">aria2 1.37.1 · yt-dlp 2026.10.15 · ffmpeg 7.1</span>
       </div>
     </div>

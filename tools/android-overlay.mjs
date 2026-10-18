@@ -25,6 +25,7 @@
  */
 
 import { existsSync, rmSync, readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, chmodSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import { dirname, resolve, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -96,6 +97,68 @@ if (existsSync(GRADLE)) {
   console.log('  (android/app/build.gradle missing — run `cap add android` first)');
 }
 
+/* --------------------- 2b. API 36 + AGP baseline --------------------------- */
+/**
+ * Capacitor 8 is built for API 36. `@capacitor/android`, `@capacitor/browser`
+ * and the other plugin modules all declare `compileSdk = 36`, and the androidx
+ * libraries they pull in (androidx.browser:1.9.0, androidx.core:1.17.0) publish
+ * AAR metadata that REQUIRES every consumer to compile against 36 or later. A
+ * consumer left on android-35 dies with:
+ *
+ *   :app:checkDebugAarMetadata FAILED
+ *     Dependency 'androidx.browser:browser:1.9.0' requires libraries and
+ *     applications that depend on it to compile against version 36 ...
+ *     :app is currently compiled against android-35.
+ *
+ * So the two facts the platform template owns are pinned here instead of being
+ * left to whichever snapshot of android/ happens to be on disk. Both edits are
+ * idempotent.
+ *
+ *   android/variables.gradle  compileSdkVersion / targetSdkVersion -> 36
+ *   android/build.gradle      com.android.tools.build:gradle      -> 8.13.0
+ *
+ * AGP 8.13.0 is what the installed Capacitor 8 CLI template ships and is the
+ * line that fully supports compileSdk 36 (8.7 only "recommends" 35 and will
+ * keep nagging). The Gradle wrapper copied in step 4 matches it.
+ */
+{
+  const VARIABLES = join(ROOT, 'android/variables.gradle');
+  if (existsSync(VARIABLES)) {
+    const before = readFileSync(VARIABLES, 'utf8');
+    const after = before
+      .replace(/(compileSdkVersion\s*=\s*)(\d+)/, (_m, lead) => `${lead}36`)
+      .replace(/(targetSdkVersion\s*=\s*)(\d+)/, (_m, lead) => `${lead}36`);
+    if (after !== before) {
+      writeFileSync(VARIABLES, after, 'utf8');
+      patched++;
+      console.log('  patched        android/variables.gradle (compileSdk/targetSdk -> 36)');
+    }
+  }
+
+  const ROOT_GRADLE = join(ROOT, 'android/build.gradle');
+  if (existsSync(ROOT_GRADLE)) {
+    const before = readFileSync(ROOT_GRADLE, 'utf8');
+    const m = /com\.android\.tools\.build:gradle:([\d.]+)/.exec(before);
+    const want = [8, 13, 0];
+    const have = m ? m[1].split('.').map(Number) : null;
+    const older =
+      !have ||
+      have[0] < want[0] ||
+      (have[0] === want[0] && have[1] < want[1]);
+    if (older) {
+      const after = m
+        ? before.replace(m[0], `com.android.tools.build:gradle:${want.join('.')}`)
+        : before.replace(
+            /dependencies\s*\{/,
+            `dependencies {\n        classpath 'com.android.tools.build:gradle:${want.join('.')}'`,
+          );
+      writeFileSync(ROOT_GRADLE, after, 'utf8');
+      patched++;
+      console.log(`  patched        android/build.gradle (AGP ${m ? m[1] : 'missing'} -> ${want.join('.')})`);
+    }
+  }
+}
+
 /* ------------------------------------- 3. capacitor.settings.gradle -------- */
 /**
  * `cap add android` generates capacitor.settings.gradle (the include list for
@@ -150,38 +213,115 @@ const SETTINGS = join(ROOT, 'android/capacitor.settings.gradle');
 
 /* --------------------------------------------- 4. gradle wrapper ------------ */
 /**
- * ./gradlew only exists if `cap add android` ran. Search the installed CLI's
- * platform template for the wrapper and copy it in - fully offline, from
- * node_modules the user already has.
+ * ./gradlew only exists after `cap add android` (or an Android Studio sync).
+ * The Capacitor CLI ships the whole platform project as a .tar.gz, so the
+ * wrapper has to be READ OUT OF THE TARBALL rather than searched for on disk —
+ * the old lookup never looked inside it, always fell through to "no gradle
+ * wrapper found", and left whatever stale wrapper android/ already had.
+ *
+ * That matters for the API 36 work above: AGP 8.13 needs Gradle >= 8.13. The
+ * template ships 8.14.3, so we both seed missing wrapper files and upgrade an
+ * existing gradle-wrapper.properties whose distribution is too old to run it.
  */
+const AGP_GRADLE_MIN = [8, 13];
 {
-  const want = [join('gradle', 'wrapper', 'gradle-wrapper.jar'), join('gradle', 'wrapper', 'gradle-wrapper.properties')];
-  // Key off the JAR: android/gradlew is a launcher shim we ship, so its
-  // presence must not suppress copying the real wrapper over it.
-  const have = want.every((w) => existsSync(join(ROOT, 'android', w)));
-  if (!have) {
+  const TARBALLS = [
+    join(ROOT, 'node_modules/@capacitor/cli/assets/android-template.tar.gz'),
+    join(ROOT, 'node_modules/@capacitor/android/assets/android-template.tar.gz'),
+  ];
+  const WRAPPER = ['gradlew', 'gradlew.bat', 'gradle/wrapper/gradle-wrapper.jar', 'gradle/wrapper/gradle-wrapper.properties'];
+
+  const tarball = TARBALLS.find((t) => existsSync(t));
+  const packed = tarball ? readTarGz(tarball, WRAPPER) : new Map();
+
+  let source = packed.size ? 'capacitor template' : null;
+  if (!source) {
+    // Fallback for a layout where the template is already extracted.
     let templateRoot = findInTree(join(ROOT, 'node_modules/@capacitor/cli'), 'gradlew', 6);
     if (!templateRoot) templateRoot = findInTree(join(ROOT, 'node_modules/@capacitor/android'), 'gradlew', 6);
     if (!templateRoot) templateRoot = findInTree(join(ROOT, 'node_modules/@ionic'), 'gradlew', 7);
     if (templateRoot) {
-      for (const w of [...want, 'gradlew', 'gradlew.bat']) {
+      for (const w of WRAPPER) {
         const src = join(templateRoot, w);
-        const dst = join(ROOT, 'android', w);
-        if (!existsSync(src)) continue;
-        mkdirSync(dirname(dst), { recursive: true });
-        writeFileSync(dst, readFileSync(src));
-        if (w === 'gradlew' || w === 'gradlew.bat') {
-          try { chmodSync(dst, 0o755); } catch { /* windows ignores */ }
-        }
-        removed++; // reuse counter as "files touched"
-        console.log(`  copied wrapper android/${w.split('/').join('/')}`);
+        if (existsSync(src)) packed.set(w, readFileSync(src));
       }
-    } else {
-      console.log('  WARNING: no gradle wrapper found in @capacitor/cli assets.');
-      console.log('           Open android/ in Android Studio once (it injects the wrapper),');
-      console.log('           or run `gradle wrapper` with any local Gradle 8+.');
+      if (packed.size) source = templateRoot;
     }
   }
+
+  const PROPS = 'gradle/wrapper/gradle-wrapper.properties';
+  const dstProps = join(ROOT, 'android', PROPS);
+
+  if (source) {
+    // 1. seed anything that is missing (gradlew shim, jar, properties)
+    for (const w of WRAPPER) {
+      const dst = join(ROOT, 'android', w);
+      if (existsSync(dst)) continue;
+      const buf = packed.get(w);
+      if (!buf) continue;
+      mkdirSync(dirname(dst), { recursive: true });
+      writeFileSync(dst, buf);
+      if (w === 'gradlew' || w === 'gradlew.bat') {
+        try { chmodSync(dst, 0o755); } catch { /* windows ignores */ }
+      }
+      removed++; // reuse counter as "files touched"
+      console.log(`  copied wrapper android/${w}`);
+    }
+
+    // 2. upgrade a distribution too old to run the pinned AGP
+    const ref = packed.get(PROPS)?.toString('utf8');
+    if (ref && existsSync(dstProps)) {
+      const cur = readFileSync(dstProps, 'utf8');
+      const curV = gradleVersionIn(cur);
+      const refV = gradleVersionIn(ref);
+      if (curV && isOlder(curV, AGP_GRADLE_MIN)) {
+        writeFileSync(dstProps, ref, 'utf8');
+        patched++;
+        console.log(`  patched        android/gradle/wrapper (Gradle ${curV.join('.')} -> ${(refV ?? AGP_GRADLE_MIN).join('.')})`);
+      }
+    }
+  } else {
+    console.log('  WARNING: no gradle wrapper found in @capacitor/cli assets.');
+    console.log('           Open android/ in Android Studio once (it injects the wrapper),');
+    console.log('           or run `gradle wrapper --gradle-version 8.14.3`.');
+  }
+}
+
+/** Minimal tar reader: pulls only the named members out of a .tar.gz. */
+function readTarGz(file, wanted) {
+  const out = new Map();
+  let tar;
+  try { tar = gunzipSync(readFileSync(file)); } catch { return out; }
+  let at = 0;
+  while (at + 512 <= tar.length) {
+    const raw = tar.toString('utf8', at, at + 100);
+    const nul = raw.indexOf('\0');
+    const name = (nul >= 0 ? raw.slice(0, nul) : raw).trim();
+    if (!name) break;
+    const size = parseInt(tar.toString('utf8', at + 124, at + 136).trim() || '0', 8) || 0;
+    const body = at + 512;
+    if (wanted.includes(name)) out.set(name, tar.subarray(body, body + size));
+    at = body + Math.ceil(size / 512) * 512;
+  }
+  return out;
+}
+
+/** `[8, 14, 3]` from a gradle-wrapper.properties distributionUrl, or null. */
+function gradleVersionIn(text) {
+  const at = text.indexOf('gradle-');
+  if (at < 0) return null;
+  const head = text.slice(at + 7).split('-')[0];
+  const parts = head.split('.').map((n) => parseInt(n, 10));
+  if (parts.length < 2 || !parts.every((n) => Number.isFinite(n))) return null;
+  return [parts[0], parts[1], parts[2] ?? 0];
+}
+
+/** a < b for two [major, minor, patch] tuples. */
+function isOlder(a, b) {
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) < (b[i] ?? 0);
+  }
+  return false;
 }
 
 /** Depth-limited search for a filename; returns its directory or null. */
@@ -253,7 +393,7 @@ function findInTree(dir, name, depth) {
   const cur = GRADLE;
   if (existsSync(tpl) && existsSync(cur)) {
     const g = readFileSync(cur, 'utf8');
-    const stale = /chaquopy/.test(g) || !/abiFilters/.test(g) || !/VERSION_21/.test(g);
+    const stale = /chaquopy/.test(g) || !/abiFilters/.test(g) || !/VERSION_21/.test(g) || !/compileSdk 36/.test(g);
     const differ = g !== readFileSync(tpl, 'utf8');
     if (stale && differ) {
       writeFileSync(cur, readFileSync(tpl, 'utf8'), 'utf8');

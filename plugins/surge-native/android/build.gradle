@@ -10,11 +10,13 @@ apply plugin: 'com.chaquo.python'
 
 android {
     namespace 'com.surge.downloader'
-    compileSdk 35
+    // Must match the Capacitor 8 baseline (see tools/templates/app-build.gradle):
+    // androidx 1.17 / browser 1.9 AAR metadata requires compileSdk 36.
+    compileSdk 36
 
     defaultConfig {
         minSdk 24
-        targetSdk 35
+        targetSdk 36
 
         // SPEC: arm64 only, for aria2/ffmpeg/CPython alike.
         ndk { abiFilters 'arm64-v8a' }

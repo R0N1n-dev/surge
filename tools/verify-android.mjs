@@ -1,0 +1,193 @@
+/**
+ * Surge — Android toolchain audit
+ * ---------------------------------------------------------------------------
+ * `./gradlew assembleDebug` is the one gate this environment cannot run (no
+ * Android SDK), so the version facts it fails on are pinned statically here.
+ * The one that actually bit us:
+ *
+ *   :app:checkDebugAarMetadata FAILED
+ *     Dependency 'androidx.browser:browser:1.9.0' requires libraries and
+ *     applications that depend on it to compile against version 36 ...
+ *     :app is currently compiled against android-35.
+ *
+ * Capacitor 8 is an API 36 stack: every plugin module declares
+ * `compileSdk = 36`, and androidx.browser 1.9 / androidx.core 1.17 publish AAR
+ * metadata that hard-requires consumers to be on 36+. So this asserts:
+ *
+ *   1. the maintained app + plugin modules compile/target against 36
+ *   2. the overlay normalises the GENERATED android/ project (variables.gradle
+ *      + the AGP version) instead of trusting a stale on-disk snapshot
+ *   3. no doc/UI string still advertises the old 35 baseline
+ *   4. our compileSdk is at least whatever Capacitor declares (catches a
+ *      Capacitor bump that outruns us)
+ *
+ * Deliberately written without regex escapes so it stays readable.
+ *
+ *   node tools/verify-android.mjs [--strict]
+ */
+
+import { readFileSync, existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(here, '..');
+const STRICT = process.argv.includes('--strict');
+
+/** The API level the whole stack must agree on. */
+const MIN_API = 36;
+
+/** Minimum Android Gradle Plugin that fully supports compileSdk 36. */
+const MIN_AGP = [8, 13, 0];
+
+const problems = [];
+const read = (rel) => readFileSync(resolve(ROOT, rel), 'utf8');
+
+/** Leading integer in `s`, or null. No regex, by design. */
+const leadingInt = (s) => {
+  let out = '';
+  for (const ch of s) {
+    if (ch >= '0' && ch <= '9') out += ch;
+    else if (out) break;
+  }
+  return out ? Number(out) : null;
+};
+
+/** Trailing integer in `s` (e.g. `... : 36`), or null. */
+const trailingInt = (s) => {
+  let out = '';
+  for (let i = s.length - 1; i >= 0; i--) {
+    const ch = s[i];
+    if (ch >= '0' && ch <= '9') out = ch + out;
+    else if (out) break;
+  }
+  return out ? Number(out) : null;
+};
+
+/**
+ * Groovy DSL value for a key: `compileSdk 36`, `targetSdk 36`,
+ * `compileSdkVersion = 36`. The longer key is skipped when the shorter one is
+ * asked for, so `compileSdk` never picks up the `compileSdkVersion` line.
+ */
+const sdkValue = (text, key) => {
+  for (const line of text.split('\n')) {
+    const at = line.indexOf(key);
+    if (at < 0) continue;
+    if (key === 'compileSdk' && line.slice(at).startsWith('compileSdkVersion')) continue;
+    if (key === 'targetSdk' && line.slice(at).startsWith('targetSdkVersion')) continue;
+    const v = leadingInt(line.slice(at + key.length).replace('=', ''));
+    if (v != null) return v;
+  }
+  return null;
+};
+
+/* --------------------------------- 1. the modules we maintain ------------- */
+
+const MODULES = [
+  'tools/templates/app-build.gradle',
+  'plugins/surge-native/android/build.gradle',
+];
+
+let assertions = 0;
+for (const rel of MODULES) {
+  if (!existsSync(resolve(ROOT, rel))) {
+    problems.push(`MISSING ${rel}`);
+    continue;
+  }
+  const g = read(rel);
+  for (const key of ['compileSdk', 'targetSdk']) {
+    assertions++;
+    const v = sdkValue(g, key);
+    if (v == null) problems.push(`${rel}: no ${key} found`);
+    else if (v < MIN_API) problems.push(`${rel}: ${key} is ${v}, needs >= ${MIN_API} (androidx AAR metadata)`);
+  }
+}
+
+/* --------------------- 2. the overlay must fix the generated tree --------- */
+
+const OVERLAY = 'tools/android-overlay.mjs';
+if (!existsSync(resolve(ROOT, OVERLAY))) {
+  problems.push(`MISSING ${OVERLAY}`);
+} else {
+  const o = read(OVERLAY);
+
+  // variables.gradle: the generated file the plugin modules read their SDK from.
+  if (!o.includes('variables.gradle') || !o.includes('compileSdkVersion') || !o.includes('targetSdkVersion')) {
+    problems.push(`${OVERLAY}: does not normalise variables.gradle compileSdkVersion/targetSdkVersion`);
+  } else if (!o.includes('${lead}36')) {
+    problems.push(`${OVERLAY}: variables.gradle normalisation does not target ${MIN_API}`);
+  }
+
+  // AGP: 8.7 only "recommends" 35; 8.13 is the first line that fully supports 36.
+  if (!o.includes('com.android.tools.build:gradle')) {
+    problems.push(`${OVERLAY}: does not pin the Android Gradle Plugin version`);
+  } else {
+    const at = o.indexOf('const want = [');
+    const seg = at < 0 ? '' : o.slice(at + 14, o.indexOf(']', at));
+    const agp = seg ? seg.split(',').map((n) => Number(n.trim())) : null;
+    if (!agp || !Number.isFinite(agp[0])) {
+      problems.push(`${OVERLAY}: could not read the AGP version pin`);
+    } else if (agp[0] < MIN_AGP[0] || (agp[0] === MIN_AGP[0] && agp[1] < MIN_AGP[1])) {
+      problems.push(`${OVERLAY}: AGP pin ${agp.join('.')} predates full compileSdk 36 support (needs ${MIN_AGP.slice(0, 2).join('.')}+)`);
+    }
+  }
+
+  // The app module is restored from the template only when it looks stale; that
+  // predicate has to notice an out-of-date compileSdk or the fix never lands in
+  // an android/ folder that already exists on disk.
+  if (!o.includes('compileSdk 36')) {
+    problems.push(`${OVERLAY}: the app/build.gradle staleness test ignores compileSdk, so a stale generated file is kept`);
+  }
+
+  // AGP 8.13 needs Gradle >= 8.13, and the wrapper only exists inside the CLI's
+  // .tar.gz — so the overlay must read it from there AND be able to upgrade a
+  // stale distribution, or the AGP bump turns an AAR error into a Gradle error.
+  if (!o.includes('android-template.tar.gz')) {
+    problems.push(`${OVERLAY}: does not read the gradle wrapper out of the Capacitor template tarball`);
+  }
+  if (!o.includes('const AGP_GRADLE_MIN = [8, 13]')) {
+    problems.push(`${OVERLAY}: does not upgrade a Gradle wrapper that is too old for the pinned AGP`);
+  }
+}
+
+/* --------------------------- 3. no stale 35 claims ------------------------ */
+
+const CLAIM_FILES = ['README.md', 'src/views/SettingsView.vue', 'mockup/build-mockup.mjs'];
+const STALE = ['compileSdk 35', 'targetSdk 35', 'compileSdkVersion = 35', 'targetSdkVersion = 35', 'Android SDK | 35'];
+for (const rel of CLAIM_FILES) {
+  if (!existsSync(resolve(ROOT, rel))) continue;
+  for (const line of read(rel).split('\n')) {
+    if (STALE.some((s) => line.includes(s))) problems.push(`stale baseline -> ${rel}: ${line.trim()}`);
+  }
+}
+
+/* -------------- 4. stay ahead of Capacitor's own declared SDK ------------- */
+
+const CAP = 'node_modules/@capacitor/android/capacitor/build.gradle';
+let capApi = null;
+if (existsSync(resolve(ROOT, CAP))) {
+  const line = read(CAP).split('\n').find((l) => l.includes('compileSdk') && l.includes(':'));
+  capApi = line ? trailingInt(line) : null;
+  if (capApi != null) {
+    const ours = sdkValue(read(MODULES[0]), 'compileSdk');
+    if (ours != null && ours < capApi) {
+      problems.push(`Capacitor declares compileSdk ${capApi}, we build with ${ours} — bump the modules and the overlay`);
+    }
+  }
+}
+
+/* ------------------------------------------------------------- report ----- */
+
+console.log('Surge Android toolchain audit');
+console.log('='.repeat(72));
+console.log(`  modules checked  ${MODULES.length}  (target API ${MIN_API})`);
+console.log(`  sdk assertions   ${assertions}`);
+console.log(`  capacitor sdk    ${capApi ?? 'n/a (node_modules not installed)'}`);
+console.log('='.repeat(72));
+if (problems.length) {
+  console.log(`\n${problems.length} PROBLEM(S):`);
+  for (const p of [...new Set(problems)]) console.log('  · ' + p);
+  if (STRICT) process.exit(1);
+} else {
+  console.log('\ncompileSdk/targetSdk, the overlay normalisation and the AGP pin all agree.');
+}

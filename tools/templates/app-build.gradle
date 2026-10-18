@@ -7,12 +7,16 @@ android {
     // com.surge.downloader R/BuildConfig space). applicationId below stays
     // com.surge.downloader - namespace only controls generated classes.
     namespace 'com.surge.downloader.app'
-    compileSdk 35
+    // API 36, not 35: Capacitor 8's own libraries compile against 36 and its
+    // androidx dependencies (androidx.browser 1.9.0, androidx.core 1.17.0)
+    // publish AAR metadata that REQUIRES every consumer to be on 36 or later.
+    // Staying on 35 fails the build at :app:checkDebugAarMetadata.
+    compileSdk 36
 
     defaultConfig {
         applicationId 'com.surge.downloader'
         minSdk 24            // Android 7.0 — covers ~98% of active devices
-        targetSdk 35         // Android 15: foreground-service type rules apply
+        targetSdk 36         // matches Capacitor 8's baseline; FGS type rules apply
         versionCode 30201
         versionName '3.2.1'
 
