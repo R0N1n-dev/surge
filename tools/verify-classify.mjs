@@ -112,6 +112,18 @@ expect('mime apk', classify({ mime: 'application/vnd.android.package-archive' })
 expect('magnet kind', classify({ kind: 'magnet' }), 'torrents');
 expect('torrent kind', classify({ kind: 'torrent' }), 'torrents');
 
+// media extractors hand us a title, not a filename → still videos, never others
+expect('youtube kind', classify({ kind: 'youtube' }), 'videos');
+expect('instagram kind', classify({ kind: 'instagram' }), 'videos');
+expect('tiktok kind', classify({ kind: 'tiktok' }), 'videos');
+expect('twitter kind', classify({ kind: 'twitter' }), 'videos');
+
+// the media-kind rule must exist on BOTH sides, or Instagram/YouTube downloads
+// silently re-file into others/ again
+if (!/MEDIA_KINDS/.test(kt)) {
+  problems.push('Classifier.kt is missing the MEDIA_KINDS → videos rule (drifted from classify.js)');
+}
+
 // unknown ext → general, no ext → others
 expect('unknown ext', classify({ name: 'weird.qqq' }), 'general');
 expect('no ext', classify({ name: 'LICENSE', url: 'https://x/LICENSE' }), 'others');

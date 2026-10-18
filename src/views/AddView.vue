@@ -90,9 +90,6 @@ onMounted(async () => {
         <Icon name="close" :size="22" />
       </button>
       <span class="appbar__title">New download</span>
-      <button class="icon-btn" aria-label="Scan QR code">
-        <Icon name="scan" :size="22" />
-      </button>
     </div>
   </header>
 

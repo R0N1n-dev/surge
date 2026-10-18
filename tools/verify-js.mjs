@@ -244,6 +244,39 @@ for (const file of KTSRC) {
   }
 }
 
+/* ------------------- 9. native-bridge contract (regression guards) --------- */
+/**
+ * Three WebView-side invariants that no compiler checks and that a refactor can
+ * break silently, so they are pinned here:
+ *   · the plugin handle stays in scope for the 1 Hz poll callback
+ *   · the poll's `sniffed` payload is republished as an event (Browser tab)
+ *   · every plugin the bridge calls is actually declared in loadPlugins()
+ */
+{
+  const bridgeFile = resolve(ROOT, 'src/lib/native.js');
+  if (existsSync(bridgeFile)) {
+    const text = readFileSync(bridgeFile, 'utf8');
+    const rel = relative(ROOT, bridgeFile);
+
+    if (/try\s*\{\s*\n\s*const p = await loadPlugins\(\)/.test(text)) {
+      problems.push(`BRIDGE ${rel}: 'const p' is scoped to the try block but the poll loop uses it`);
+    }
+    if (!/if \(p\) setInterval\(/.test(text)) {
+      problems.push(`BRIDGE ${rel}: the native poll loop is not guarded by the plugin handle`);
+    }
+    if (!/r\.sniffed/.test(text) || !/emit\('sniffed'/.test(text)) {
+      problems.push(`BRIDGE ${rel}: poll 'sniffed' payload is never surfaced as an event`);
+    }
+
+    const used = new Set([...text.matchAll(/\bp\.([A-Z][A-Za-z]+)\./g)].map((m) => m[1]));
+    for (const name of used) {
+      if (!new RegExp(`(?:^|[\\s{,])${name}\\s*:`).test(text)) {
+        problems.push(`BRIDGE ${rel}: p.${name} is called but '${name}' is not declared in loadPlugins()`);
+      }
+    }
+  }
+}
+
 /* ---------------------------------------------------------------- report --- */
 
 console.log('Surge source audit');

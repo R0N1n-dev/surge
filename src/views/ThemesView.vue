@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import Icon from '@/components/Icon.vue';
 import { useThemeStore, PALETTES, MODES } from '@/stores/theme.js';
-import { tonalPalette, TONES } from '../../tools/color.mjs';
+import { tonalPalette } from '../../tools/color.mjs';
 
 const router = useRouter();
 const theme = useThemeStore();

@@ -35,7 +35,12 @@ class SurgeWidget : AppWidgetProvider() {
         private fun build(context: Context, active: Int, down: Long, up: Long, topName: String?, pct: Float): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_surge)
 
-            val headline = if (active > 0) "$active active · ${human(down)}/s" else "All downloads complete"
+            val pctInt = (pct.coerceIn(0f, 1f) * 100).toInt()
+            val headline = when {
+                active == 0 -> "All downloads complete"
+                active == 1 -> "1 active · ${human(down)}/s · $pctInt%"
+                else -> "$active active · ${human(down)}/s"
+            }
             views.setTextViewText(R.id.widget_title, headline)
             views.setTextViewText(R.id.widget_speed, "↓${human(down)} ↑${human(up)}")
             views.setTextViewText(
@@ -44,12 +49,7 @@ class SurgeWidget : AppWidgetProvider() {
             )
             // The bar is the whole point of the widget. It was never driven, so
             // it sat empty forever even mid-transfer.
-            views.setProgressBar(
-                R.id.widget_progress,
-                100,
-                (pct.coerceIn(0f, 1f) * 100).toInt(),
-                active == 0,
-            )
+            views.setProgressBar(R.id.widget_progress, 100, pctInt, false)
 
             // Tap the body -> Downloads tab.
             views.setOnClickPendingIntent(
