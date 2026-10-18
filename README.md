@@ -227,7 +227,7 @@ npx cap sync android        # copies dist/ into android/app/src/main/assets
 #   android/app/src/main/jniLibs/arm64-v8a/libaria2c.so
 #   android/app/src/main/jniLibs/arm64-v8a/libffmpeg.so
 #   android/app/src/main/jniLibs/arm64-v8a/libffprobe.so
-bun run android:prep        # generates capacitor.settings.gradle + gradle wrapper
+bun run android:prep        # wrapper + SDK 36 + AGP 8.13 + capacitor.settings.gradle
 cd android && ./gradlew clean :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb logcat -s SurgeBoot Capacitor CapacitorConsole AndroidRuntime chromium
@@ -237,3 +237,27 @@ adb logcat -s SurgeBoot Capacitor CapacitorConsole AndroidRuntime chromium
 `bridge activity created` → `DownloadService.onCreate` → `DownloadService ready`.
 If it stops between two of those, that gap is your bug. Gradle will happily run a
 stale APK whose WebView code no longer matches the Kotlin plugins — always clean.
+
+### `bash: ./gradlew: No such file or directory`
+
+`cap sync android` **never** creates the Gradle wrapper — only `cap add android`
+does — so a folder provisioned by a bare sync has no `./gradlew`:
+
+```bash
+npm run build
+bunx cap sync android          # copies web assets + plugins; leaves no wrapper
+cd android && ./gradlew assembleDebug
+# bash: ./gradlew: No such file or directory
+```
+
+Run the overlay, which unpacks the wrapper (Gradle 8.14.3 — the version the
+pinned AGP 8.13 needs) straight out of the Capacitor CLI template that is already
+in `node_modules`, and upgrades a too-old wrapper if one is already there:
+
+```bash
+npm run android:prep           # or: bun run cap:sync, which runs it for you
+cd android && ./gradlew clean :app:assembleDebug
+```
+
+`android:build`, `android:bundle` and `android:run` run the overlay themselves, so
+the repo's own commands can never hit this.

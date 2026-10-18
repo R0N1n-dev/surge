@@ -176,6 +176,27 @@ if (existsSync(resolve(ROOT, CAP))) {
   }
 }
 
+/* ------------------- 5. gradle is never invoked unprepared ---------------- */
+/**
+ * `cap sync android` does not create the wrapper, so a script that shells out to
+ * ./gradlew on its own is one bare sync away from
+ *     bash: ./gradlew: No such file or directory
+ * Every gradle-invoking script must reconcile first.
+ */
+{
+  let pkg = { scripts: {} };
+  try { pkg = JSON.parse(read('package.json')); } catch { /* reported below */ }
+  const script = (k) => pkg.scripts?.[k] ?? '';
+  for (const key of ['android:build', 'android:bundle']) {
+    if (!script(key).includes('android-overlay.mjs')) {
+      problems.push(`package.json: "${key}" runs gradle without the overlay first — no gradlew means "No such file or directory"`);
+    }
+  }
+  if (!script('android:run').includes('android-overlay.mjs')) {
+    problems.push('package.json: "android:run" does not run the overlay before `cap run`');
+  }
+}
+
 /* ------------------------------------------------------------- report ----- */
 
 console.log('Surge Android toolchain audit');
