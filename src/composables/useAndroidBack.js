@@ -29,10 +29,13 @@ export function useAndroidBack() {
   let nativeExit = null;
 
   function canGoBackInApp() {
-    // Vue Router records the previous entry in history.state when the entry
-    // was produced by router.push/replace inside the SPA.
+    // Vue Router records the PREVIOUS entry's path in history.state.back when
+    // the entry was produced by a router.push/replace inside the SPA. `current`
+    // is always set (it is this very entry), so testing it claims history
+    // exists even on a cold deep-link: a widget tap or share intent lands
+    // straight on /add, where router.back() is a no-op that traps the user.
     const st = window.history.state;
-    return !!(st && (st.back || st.current));
+    return !!(st && st.back);
   }
 
   async function onBack() {
@@ -49,12 +52,14 @@ export function useAndroidBack() {
       return;
     }
     const current = router.currentRoute.value;
-    if (canGoBackInApp() && (current.meta?.modal || window.history.state?.back)) {
+    if (canGoBackInApp()) {
       router.back();
       return;
     }
     if (current.name !== 'home') {
-      router.push('/');
+      // No in-app history behind this screen (deep-link / cold start): go Home
+      // instead of faking a back that would leave the app.
+      router.replace('/');
       return;
     }
     // Nothing left: leave, don't trap the user in the app.

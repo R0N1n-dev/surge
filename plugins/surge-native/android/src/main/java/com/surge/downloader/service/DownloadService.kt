@@ -141,7 +141,9 @@ class DownloadService : Service() {
             lastFanout = now
             wasIdle = idle
             nm.notify(NOTIF_ID_ONGOING, if (idle) buildIdle() else buildOngoing(snaps.filter { it.state == "active" || it.state == "seeding" }, down, up))
-            SurgeWidget.refresh(this, active, down, up, snaps.firstOrNull { it.state == "active" }?.name)
+            val top = snaps.firstOrNull { it.state == "active" }
+            val topPct = if (top != null && top.total > 0) (top.done.toDouble() / top.total).toFloat() else 0f
+            SurgeWidget.refresh(this, active, down, up, top?.name, topPct)
         }
     }
 

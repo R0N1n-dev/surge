@@ -58,6 +58,10 @@ async function loadPlugins() {
     Share: share.Share,
     // Our own Kotlin plugins, registered in MainActivity.
     Downloader: cap.registerPlugin('Downloader'),
+    // SafeArea is ours too. It was missing from this table, so every
+    // getInsets() call threw and the UI silently fell back to zero insets —
+    // i.e. content under the status bar and the gesture pill on device.
+    SafeArea: cap.registerPlugin('SafeArea'),
     Torrent: cap.registerPlugin('Torrent'),
     Media: cap.registerPlugin('Media'),
     Storage: cap.registerPlugin('Storage'),
@@ -178,8 +182,13 @@ export const bridge = {
    */
   async init() {
     if (isNative) {
+      // Declared outside the try so the poll loop below can still use it. As a
+      // `const` inside the try block it was not in scope for the callback, so
+      // every tick threw `p is not defined` — which silently killed live
+      // progress, totals and browser sniffing on device.
+      let p = null;
       try {
-        const p = await loadPlugins();
+        p = await loadPlugins();
         // Native → JS event stream.
         p.Downloader.addListener('progress', (d) => patchItem(d.id, d));
         p.Downloader.addListener('state', (d) => patchItem(d.id, { state: d.state, error: d.error ?? null }));
@@ -201,7 +210,7 @@ export const bridge = {
         console.warn('[surge] native init degraded; running on local table', e);
       }
       // 1 Hz batched poll: global rates + every item + browser sniffs.
-      setInterval(async () => {
+      if (p) setInterval(async () => {
         try {
           const r = await p.Downloader.poll();
           state.totals.down = r.down ?? 0;
@@ -213,6 +222,9 @@ export const bridge = {
           });
           state.history.push([Date.now(), r.down ?? 0]);
           if (state.history.length > 120) state.history.shift();
+          // Browser tab: the native sniffing WebView drains its hit list into
+          // this same poll, so republish it as an event instead of dropping it.
+          if (Array.isArray(r.sniffed) && r.sniffed.length) emit('sniffed', { items: r.sniffed });
           emit('tick');
         } catch {
           /* engine mid-restart; next tick recovers */

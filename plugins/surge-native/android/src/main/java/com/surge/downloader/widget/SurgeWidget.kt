@@ -24,15 +24,15 @@ class SurgeWidget : AppWidgetProvider() {
         const val ACTION_ADD = "com.surge.downloader.WIDGET_ADD"
 
         /** Called by DownloadService on every poll tick. */
-        fun refresh(context: Context, active: Int, down: Long, up: Long, topName: String?) {
+        fun refresh(context: Context, active: Int, down: Long, up: Long, topName: String?, pct: Float = 0f) {
             val mgr = AppWidgetManager.getInstance(context)
             val ids = mgr.getAppWidgetIds(ComponentName(context, SurgeWidget::class.java))
             if (ids.isEmpty()) return
-            val views = build(context, active, down, up, topName)
+            val views = build(context, active, down, up, topName, pct)
             mgr.updateAppWidget(ids, views)
         }
 
-        private fun build(context: Context, active: Int, down: Long, up: Long, topName: String?): RemoteViews {
+        private fun build(context: Context, active: Int, down: Long, up: Long, topName: String?, pct: Float): RemoteViews {
             val views = RemoteViews(context.packageName, R.layout.widget_surge)
 
             val headline = if (active > 0) "$active active · ${human(down)}/s" else "All downloads complete"
@@ -41,6 +41,14 @@ class SurgeWidget : AppWidgetProvider() {
             views.setTextViewText(
                 R.id.widget_name,
                 topName?.substringAfterLast('/') ?: "Tap to open Library",
+            )
+            // The bar is the whole point of the widget. It was never driven, so
+            // it sat empty forever even mid-transfer.
+            views.setProgressBar(
+                R.id.widget_progress,
+                100,
+                (pct.coerceIn(0f, 1f) * 100).toInt(),
+                active == 0,
             )
 
             // Tap the body -> Downloads tab.
@@ -88,7 +96,7 @@ class SurgeWidget : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) {
         // Initial paint; the service overwrites with live numbers shortly.
-        mgr.updateAppWidget(ids, build(context, 0, 0, 0, null))
+        mgr.updateAppWidget(ids, build(context, 0, 0, 0, null, 0f))
     }
 
     override fun onReceive(context: Context, intent: Intent) {

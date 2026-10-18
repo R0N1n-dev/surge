@@ -33,7 +33,6 @@ const prefs = reactive({
     <div class="appbar__row">
       <span class="appbar__title">Settings</span>
       <div class="grow"></div>
-      <button class="icon-btn" aria-label="Search settings"><Icon name="search" :size="22" /></button>
     </div>
   </header>
 

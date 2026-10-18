@@ -395,6 +395,7 @@ class WidgetPlugin : Plugin() {
             (call.getInt("down", 0) ?: 0).toLong(),
             (call.getInt("up", 0) ?: 0).toLong(),
             call.getString("title"),
+            (call.getDouble("pct", 0.0) ?: 0.0).toFloat(),
         )
         call.resolve()
     }

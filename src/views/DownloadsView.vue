@@ -59,11 +59,8 @@ function onScroll(e) {
         </span>
       </div>
       <div class="grow"></div>
-      <button class="icon-btn" aria-label="Search downloads">
-        <Icon name="search" :size="22" />
-      </button>
-      <button class="icon-btn" aria-label="Sort">
-        <Icon name="sort" :size="22" />
+      <button class="icon-btn" aria-label="Pause all downloads" @click="dl.pauseAll()">
+        <Icon name="pause" :size="22" />
       </button>
     </div>
   </header>

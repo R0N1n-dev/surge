@@ -50,7 +50,6 @@ function open(item) {
     <div class="appbar__row">
       <span class="appbar__title">Library</span>
       <div class="grow"></div>
-      <button class="icon-btn" aria-label="Search"><Icon name="search" :size="22" /></button>
       <button class="icon-btn" aria-label="Toggle grid or list" @click="ui.viewMode = ui.viewMode === 'grid' ? 'list' : 'grid'">
         <Icon :name="ui.viewMode === 'grid' ? 'list' : 'grid'" :size="22" />
       </button>

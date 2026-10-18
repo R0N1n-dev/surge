@@ -160,6 +160,9 @@ export function extensionOf(nameOrUrl = '') {
   return m ? m[1].toLowerCase() : '';
 }
 
+/** Source kinds that are always video downloads (yt-dlp extractors). */
+const MEDIA_KINDS = new Set(['youtube', 'instagram', 'tiktok', 'twitter']);
+
 /**
  * Classify a download. Signals are tried in order of reliability:
  *   1. an explicit override (the user picked a category in the picker)
@@ -193,6 +196,11 @@ export function classify({ name = '', url = '', mime = '', kind = '', override =
     // itself belongs with torrents.
     return { ...CATEGORY_BY_ID.torrents, via: 'kind' };
   }
+
+  // Media extractors deliver a *title*, not a filename, so there is no
+  // extension to match on: a YouTube/Instagram/TikTok/X download is a video by
+  // nature. Without this rule it fell through to `others/`.
+  if (MEDIA_KINDS.has(kind)) return { ...CATEGORY_BY_ID.videos, via: 'kind' };
 
   if (!ext) return { ...CATEGORY_BY_ID.others, via: 'no-extension' };
   return { ...CATEGORY_BY_ID.general, via: 'general' };

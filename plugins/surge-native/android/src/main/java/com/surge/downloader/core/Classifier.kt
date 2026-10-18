@@ -42,6 +42,9 @@ object Classifier {
     const val GENERAL = "general"
     const val TORRENTS = "torrents"
 
+    /** yt-dlp source kinds — always video payloads. Mirrors classify.js. */
+    private val MEDIA_KINDS = setOf("youtube", "instagram", "tiktok", "twitter")
+
     private val EXT_INDEX: Map<String, String> = buildMap {
         for ((cat, exts) in TABLE) for (e in exts) if (!containsKey(e)) put(e, cat)
     }
@@ -105,6 +108,8 @@ object Classifier {
         }
 
         if (kind == "torrent" || kind == "magnet") return TORRENTS
+        // Media extractors hand us a title, not a filename (see classify.js).
+        if (kind != null && kind in MEDIA_KINDS) return "videos"
         if (ext.isEmpty()) return OTHERS
         return GENERAL
     }

@@ -7,10 +7,19 @@ import { formatBytes } from '@/lib/format.js';
 import { useUiStore } from '@/stores/ui.js';
 import { useSettingsStore } from '@/stores/settings.js';
 import { classify, displayPath, CATEGORIES } from '@/lib/classify.js';
+import { detectSource } from '@/lib/url.js';
 
 const router = useRouter();
 const ui = useUiStore();
 const settings = useSettingsStore();
+
+/**
+ * The link the composer handed over. Its real source kind drives the badge, the
+ * extractor and the auto-filed category — hard-coding 'youtube' here made every
+ * Instagram/TikTok/X link look like a YouTube download and file into others/.
+ */
+const pendingUrl = ref(sessionStorage.getItem('surge.pendingUrl') || 'https://youtu.be/aqz-KE-bpKQ');
+const source = computed(() => detectSource(pendingUrl.value));
 
 const meta = ref(null);
 const loading = ref(true);
@@ -26,8 +35,8 @@ const saveCat = ref(null);
 const category = computed(() =>
   classify({
     name: meta.value?.title ?? '',
-    url: sessionStorage.getItem('surge.pendingUrl') ?? '',
-    kind: 'youtube',
+    url: pendingUrl.value,
+    kind: source.value.kind,
     override: saveCat.value,
   }),
 );
@@ -35,8 +44,7 @@ const category = computed(() =>
 const BITRATES = [128, 192, 256, 320];
 
 onMounted(async () => {
-  const url = sessionStorage.getItem('surge.pendingUrl') || 'https://youtu.be/aqz-KE-bpKQ';
-  meta.value = await bridge.probe(url);
+  meta.value = await bridge.probe(pendingUrl.value);
   loading.value = false;
   // Sensible default: the best format at or below 1080p that actually exists.
   const avail = meta.value?.formats?.map((f) => f.res) ?? [];
@@ -61,9 +69,9 @@ async function start() {
   await bridge.add([
     {
       name: meta.value?.title ?? 'video',
-      kind: 'youtube',
+      kind: source.value.kind,
       engine: 'ytdlp',
-      url: sessionStorage.getItem('surge.pendingUrl') ?? '',
+      url: pendingUrl.value,
       media: meta.value,
       selectedFormat: chosen.value,
       convertToMp3: convert.value,
