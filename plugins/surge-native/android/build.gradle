@@ -53,22 +53,6 @@ android {
         ndk { abiFilters 'arm64-v8a' }
     }
 
-    // Embedded CPython 3.11 so yt-dlp runs on-device. Extracted lazily on first
-    // media use, never during bridge init (that used to hang the splash).
-    chaquopy {
-        defaultConfig {
-            // 3.8 has the widest wheel availability on Chaquopy; yt-dlp
-            // 2024.11.18 still supports it. 3.11 works but warns about gaps.
-            version '3.8'
-            pip {
-                // 2024.10.22 is the newest release Chaquopy's wheel index
-                // carries (its mirror lags PyPI); a newer pin fails resolution.
-                install 'yt-dlp==2024.10.22'
-                install 'mutagen'   // pure-python tag writing for the MP3 path
-            }
-        }
-    }
-
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
@@ -82,6 +66,39 @@ android {
             // exec() of the extracted libaria2c.so requires legacy packaging.
             useLegacyPackaging = true
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Python toolchain (Chaquopy) — TOP LEVEL, not inside `android { }`.
+//
+// Chaquopy's extension is a project extension and its docs put this block beside
+// `android { }`. Nested inside `android { }` it only resolves through Groovy's
+// owner fallback, and then `defaultConfig` shadows AGP's `android.defaultConfig`
+// of the same name — the kind of ambiguity that yields nonsense errors.
+//
+// This is the ONLY module allowed to apply com.chaquo.python: its docs say it
+// "can only be used in one module per app", and the app module deliberately does
+// not apply it. The runtime is still packaged into the APK from here, so
+// YtDlp/Python.getInstance() keep working.
+// ---------------------------------------------------------------------------
+chaquopy {
+    defaultConfig {
+        // 3.11: supported by Chaquopy 17.1 and by yt-dlp (3.8 is not any more).
+        version '3.11'
+        pip {
+            // Pure-Python packages: no native wheel needed, so any release
+            // installs. Kept current because site extractors (Instagram,
+            // YouTube, TikTok) break often.
+            install 'yt-dlp==2024.11.18'
+            install 'mutagen'   // pure-python tag writing for the MP3 path
+        }
+        // Ship .py instead of .pyc: readable tracebacks in logcat, and it skips
+        // Chaquopy's "buildPython version is incompatible" warning.
+        // In Chaquopy 17 `pyc` lives on defaultConfig; at the top level of the
+        // `chaquopy` block it errors with:
+        //   Could not find method pyc() ... on extension 'chaquopy'
+        pyc { src = false }
     }
 }
 

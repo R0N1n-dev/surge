@@ -1,6 +1,12 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
-apply plugin: 'com.chaquo.python'
+// NO com.chaquo.python here: Chaquopy may only be used in ONE module per app,
+// and that module is `:surge-native` (it owns yt-dlp_bridge.py + YtDlp.kt).
+// Applying it in both modules makes the build fail ("may fail" per Chaquopy's
+// own docs) and produced the conflicting pins (3.11 vs 3.8, two yt-dlp
+// versions) plus the invalid `pyc {}` call that broke this build.
+// The Python runtime still ends up in the app: Chaquopy merges the library
+// module's Python into the APK.
 
 android {
     // Distinct from the surge-native plugin module's namespace (which owns the
@@ -30,21 +36,9 @@ android {
         }
     }
 
-    // Chaquopy: embed CPython 3.11 so yt-dlp runs on-device with no server.
-    // arm64-v8a only, matching the abiFilters above.
-    chaquopy {
-        defaultConfig {
-            version '3.11'
-            pip {
-                install 'yt-dlp==2024.11.18'
-                install 'mutagen'      // tag writing for the MP3 pipeline
-                install 'brotli'       // required by yt-dlp for some extractors
-            }
-        }
-        productFlavors {}
-        buildTypes {}
-        pyc { src = false }   // ship .py, keeps tracebacks readable in the log
-    }
+    // The Python toolchain lives in `:surge-native` (see that module), NOT here:
+    // Chaquopy allows exactly one module per app. Its runtime is still packaged
+    // into the APK from that module, so YtDlp keeps working.
 
     buildTypes {
         debug {

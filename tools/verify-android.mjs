@@ -177,7 +177,7 @@ if (!existsSync(resolve(ROOT, OVERLAY))) {
     'com.android.library': 'com.android.tools.build:gradle',
   };
 
-  const applied = new Set();
+  const applied = new Map(); // plugin id -> module files that apply it
   for (const rel of MODULES) {
     if (!existsSync(resolve(ROOT, rel))) continue;
     for (const line of read(rel).split('\n')) {
@@ -195,12 +195,16 @@ if (!existsSync(resolve(ROOT, OVERLAY))) {
       if (marker < 0) continue;
       const open = line.indexOf(String.fromCharCode(39), marker);
       const close = open < 0 ? -1 : line.indexOf(String.fromCharCode(39), open + 1);
-      if (close > open) applied.add(line.slice(open + 1, close));
+      if (close > open) {
+        const id = line.slice(open + 1, close);
+        if (!applied.has(id)) applied.set(id, []);
+        if (!applied.get(id).includes(rel)) applied.get(id).push(rel);
+      }
     }
   }
 
   const overlaySrc = existsSync(resolve(ROOT, OVERLAY)) ? read(OVERLAY) : '';
-  for (const id of applied) {
+  for (const [id, mods] of applied) {
     const coord = CLASS_FOR[id];
     if (!coord) {
       problems.push(`${OVERLAY}: plugin '${id}' is applied by a module but this audit does not know its classpath`);
@@ -209,6 +213,17 @@ if (!existsSync(resolve(ROOT, OVERLAY))) {
     if (!overlaySrc.includes(coord)) {
       problems.push(`plugin '${id}' is applied but '${coord}' is never declared — "Plugin with id '${id}' not found"`);
     }
+  }
+
+  // Chaquopy's own documentation: "The Chaquopy plugin can only be used in one
+  // module per app ... If you use it in multiple modules, the build may fail."
+  // Applying it in both :app and :surge-native also produced conflicting
+  // versions (3.11 vs 3.8) and an invalid `pyc {}` call.
+  const chaquopy = applied.get('com.chaquo.python') ?? [];
+  if (chaquopy.length > 1) {
+    problems.push(
+      `com.chaquo.python is applied in ${chaquopy.length} modules (${chaquopy.join(', ')}) — Chaquopy allows exactly one module per app`,
+    );
   }
 }
 
