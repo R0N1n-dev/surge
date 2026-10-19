@@ -9,7 +9,7 @@ import { fileURLToPath, URL } from 'node:url';
  *    the Capacitor scheme, so absolute `/asset.js` paths would 404.
  *  - Inline-critical CSS and no code-splitting gymnastics: the app shell must
  *    paint before any plugin resolves, otherwise the splash→app handoff flickers.
- *  - The design-token audit runs as part of `vite build` in CI via `npm run verify`.
+ *  - The design-token audit runs as part of `bun run verify`.
  */
 export default defineConfig({
   plugins: [vue()],

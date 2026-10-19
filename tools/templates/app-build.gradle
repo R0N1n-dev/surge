@@ -123,7 +123,7 @@ dependencies {
 }
 
 // ---------------------------------------------------------------------------
-// Registration belts, at GRADLE level (npm scripts are not a guarantee).
+// Registration belts, at GRADLE level (package scripts are not a guarantee).
 //  · merge our 7 plugin classpaths into assets/capacitor.plugins.json (the
 //    bridge auto-registers from it; cap sync rewrites it, so re-merge pre-build)
 //  · restore the MainActivity that registerPlugin()s all seven, in case a

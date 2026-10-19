@@ -1,9 +1,10 @@
 /**
  * Surge — JS / Vue static audit
  * ---------------------------------------------------------------------------
- * We build offline (no npm registry in this environment), so a real `vite build`
- * is not available as a gate. This is the next best thing: it catches the class
- * of errors a build would catch before any browser is involved —
+ * `vite build` is the real compile gate, but it cannot see the class of bug that
+ * has actually broken this app (a template calling a bridge method that does not
+ * exist, a Pinia ref read through `.value`). This audit catches those, plus the
+ * things a build fails on before any browser is involved —
  *
  *   1. syntax errors in every .js / .mjs file and every SFC <script> block
  *   2. unresolved imports (@/ aliases and relative paths)

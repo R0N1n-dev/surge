@@ -8,53 +8,68 @@ Replaces IDM+/1DM-class apps with a modern, token-driven Material 3 UI.
 
 ---
 
-## Open the design first
+## Quick start (bun)
 
-```
-mockup/surge-mockup.html        ← 14 phone screens, palette gallery, icon set
+```bash
+bun install              # deps + postinstall (reconciles android/ when it exists)
+bun run build            # production bundle → dist/
+bun run cap:add:android  # FIRST TIME on this machine only: create android/
+bun run android:build    # overlay + ./gradlew :app:assembleDebug
 ```
 
-Open it in any browser (no network needed). Every frame is rendered with the
-**same** `src/styles/themes.css` + `components.css` the app ships, so it is a
-faithful preview, not a drawing. Regenerate with `npm run mockup`.
+Stuck? `bun run android:check` audits the generated `android/` folder and prints the exact
+command that fixes whatever is missing. Details: [Building the Android app](#building-the-android-app-step-by-step).
+
+Want to see the UI without building? Open **`mockup/surge-mockup.html`** in any
+browser (no network needed). It renders every screen from the same
+`themes.css` + `components.css` the app ships, so it is a faithful preview rather
+than a drawing. Regenerate with `bun run mockup`.
 
 ---
 
 ## Requirements
 
-| Tool     | Version | Why                                                     |
-| -------- | ------- | ------------------------------------------------------- |
-| JDK      | **21**  | per spec; AGP 8.13 runs on it and targets `compileSdk 36` |
-| Node     | ≥ 20    | Vite 6                                                    |
-| Android SDK | 36   | compileSdk/targetSdk 36 (Capacitor 8 baseline)             |
-| Python   | 3.11    | only for `tools/gen-icons.py` (asset generation)          |
+| Tool | Version | Why |
+| --- | --- | --- |
+| **bun** | ≥ 1.4 | package manager + script runner; this is the supported path |
+| JDK | **21** | AGP 8.13 targets `compileSdk 36` |
+| Android SDK Platform | **36** | Capacitor 8's androidx AARs refuse to build against 35 |
+| Python | 3.11 | only for `tools/gen-icons.py` (asset generation) |
 
-> **Android SDK Platform 36 is required.** Capacitor 8 is an API 36 stack, and
-> the androidx libraries it pulls in (`androidx.browser:1.9.0`,
-> `androidx.core:1.17.0`) publish AAR metadata that refuses to build unless the
-> consumer compiles against API 36 — a project still on 35 dies at
-> `:app:checkDebugAarMetadata`. Install **SDK Platform 36** in the SDK Manager.
->
-> `android/` is **generated, not tracked** (see `.gitignore`). `npm install`
-> runs `tools/android-overlay.mjs` as a postinstall step, and `npm run
-> android:prep` does the same on demand: it pins `compileSdkVersion`/
-> `targetSdkVersion` (36), the Android Gradle Plugin (8.13), the **Kotlin and
-> Chaquopy plugin classpaths**, the Gradle wrapper (8.14.3) and
-> `capacitor.settings.gradle` in that folder. `npm run android:check` fails if
-> any of it drifts.
+> **SDK Platform 36 is mandatory.** `androidx.browser:1.9.0` and
+> `androidx.core:1.17.0` publish AAR metadata that requires API 36; on 35 the
+> build dies at `:app:checkDebugAarMetadata`. Install it with
+> `sdkmanager "platforms;android-36"` (or SDK Manager → SDK Platforms).
 
 No TypeScript anywhere. Plain JavaScript + Vue SFCs.
 
-## Setup
+## Everyday commands
 
-```bash
-bun install             # or npm install
-bun run cap:sync        # cap sync android + android-overlay (see below)
-bun run tokens          # regenerate src/styles/themes.css from tools/themes.mjs
-npm run dev             # browser preview with a live simulated engine
-bun run build && bun run cap:sync
-bun run android:run     # or: cd android && ./gradlew :app:assembleDebug
-```
+| Command | What it does |
+| --- | --- |
+| `bun install` | Install deps; postinstall reconciles `android/` |
+| `bun run dev` | Vite dev server with a simulated download engine |
+| `bun run build` | Production bundle into `dist/` |
+| `bun run verify` | Every gate: tokens, CSS, JS, Android toolchain, stores |
+| `bun run android:check` | Audits the **generated** `android/` folder and names the fix |
+| `bun run android:prep` | Re-applies SDK 36 / AGP 8.13 / plugin classpaths / wrapper |
+| `bun run cap:add:android` | First-time `cap add android` + overlay |
+| `bun run cap:sync` | `cap sync android` + overlay |
+| `bun run android:build` | Overlay + debug APK |
+| `bun run android:run` | Overlay + `cap run android` |
+| `bun run android:bundle` | Overlay + release AAB |
+| `bun run tokens` | Regenerate `src/styles/themes.css` from `tools/themes.mjs` |
+| `bun run mockup` | Regenerate the design mockup, then verify it |
+| `bun run icons` | Regenerate launcher / splash / notification artwork |
+
+> **Why `android:prep` exists.** `android/` is **generated and git-ignored**
+> (`.gitignore`), so pulling source never changes it. `bun install` runs
+> `tools/android-overlay.mjs` as a postinstall step, and `bun run android:prep`
+> runs it on demand. It pins `compileSdkVersion`/`targetSdkVersion` **36**, AGP
+> **8.13**, the **Kotlin + Chaquopy plugin classpaths**, the Gradle wrapper
+> **8.14.3** and `capacitor.settings.gradle`, and points `:surge-native` at the
+> tracked source instead of `node_modules`. `bun run android:check` fails if any
+> of that drifts.
 
 ### Icon art direction
 
@@ -68,23 +83,38 @@ Regenerate all artwork (launcher icons, adaptive layers, notification icons,
 splash, widget preview, contact sheet):
 
 ```bash
-npm run icons                      # default palette: bright-tech / dark
+bun run icons                      # default palette: bright-tech / dark
 python3 tools/gen-icons.py --theme cyber-contrast --mode light
 ```
 
-## Verification gates (all offline, no network)
+## Verification gates (all offline)
+
+One command runs everything CI runs:
 
 ```bash
-npm run tokens:check    # 468 WCAG contrast checks across 18 palette×mode sets
-npm run css:check       # every var(--s-*) used is actually defined
-npm run android:check   # compileSdk/targetSdk 36 + AGP pin + overlay normalisation
-npm run stores:check    # constructs every Pinia store; 31 runtime assertions
-node tools/verify-mockup.mjs --strict   # tag balance, class coverage, sprite refs
-node tools/verify-js.mjs --strict       # syntax, imports, templates, icons,
-                                        #   + WebView-compat gate (no Chrome 92+
-                                        #   APIs in the boot path, color-mix and
-                                        #   backdrop-filter always have fallbacks)
-node tools/verify-classify.mjs --strict # JS <-> Kotlin category tables agree
+bun run verify
+```
+
+…which is exactly:
+
+```bash
+bun run tokens:check    # 468 WCAG contrast checks across 18 palette×mode sets
+bun run css:check       # every var(--s-*) used is actually defined
+bun run android:check   # SDK 36 / AGP / classpaths + your generated android/ folder
+bun run stores:check    # constructs all 4 Pinia stores; 31 runtime assertions
+node tools/verify-js.mjs --strict        # syntax, imports, templates, icons,
+                                         #   bridge calls, Pinia `.value` misuse,
+                                         #   WebView-compat (no Chrome 92+ APIs in
+                                         #   the boot path; color-mix and
+                                         #   backdrop-filter always fall back)
+node tools/verify-classify.mjs --strict  # JS ↔ Kotlin category tables agree
+node tools/verify-mockup.mjs --strict    # tag balance, class coverage, sprite refs
+```
+
+Plus the real compile gate:
+
+```bash
+bun run build            # vite build → dist/ — must pass before any APK
 ```
 
 ---
@@ -96,7 +126,7 @@ node tools/verify-classify.mjs --strict # JS <-> Kotlin category tables agree
 │ views/  components/  stores/  composables/                                  │
 │   └─ src/lib/native.js   ← the ONLY place Capacitor is imported             │
 │        · live reactive download table                                       │
-│        · web Mock engine (same event shapes) so `npm run dev` is faithful   │
+│        · web Mock engine (same event shapes) so `bun run dev` is faithful   │
 └──────────────────────────────────┬──────────────────────────────────────────┘
                                    │ Capacitor bridge (6 Kotlin plugins)
 ┌──────────────────────────────────┴──────────────────────────────────────────┐
@@ -128,7 +158,7 @@ Combined with `abiFilters 'arm64-v8a'` + `useLegacyPackaging = true`
 **both light and dark** via an OKLCH tonal-palette engine (`tools/color.mjs`).
 `tools/gen-css.mjs` emits `src/styles/themes.css` (18 palettes, ~8 KB gzipped).
 Runtime switching is a class swap; Material You overwrites the three seed roles
-with wallpaper-derived colours. `npm run tokens:check` fails CI if any
+with wallpaper-derived colours. `bun run tokens:check` fails CI if any
 palette/mode pairing drops below WCAG AA.
 
 ---
@@ -169,26 +199,31 @@ resources/        master artwork + logo.svg (Capacitor source assets)
 uploads/          your app-theme.txt (the palette brief)
 ```
 
-## Why you should never need `cap add android` again
+## How the `android/` folder is managed
 
-All custom Kotlin + resources live in **`plugins/surge-native/`**, a local
-Capacitor plugin (a `file:` dependency). `cap sync` adds it to
-`capacitor.settings.gradle` and writes it into `assets/capacitor.plugins.json`,
-and the **stock** `BridgeActivity` auto-registers every `@CapacitorPlugin` —
-there is no manual `registerPlugin()` left to lose. `android/` is now just the
-app shell, so regenerating it is harmless.
+`android/` is **generated, never committed** (`.gitignore`). It is produced by
+`cap add android` from the Capacitor CLI template already in `node_modules`, then
+reconciled by `tools/android-overlay.mjs`.
 
-If you *do* regenerate the platform for any reason:
+All custom Kotlin + resources live in **`plugins/surge-native/`**, a local Capacitor
+plugin (a `file:` dependency), so regenerating the platform is harmless: `cap sync` adds
+it to `capacitor.settings.gradle` + `assets/capacitor.plugins.json`, the **stock**
+`BridgeActivity` auto-registers every `@CapacitorPlugin`, and the overlay points
+`:surge-native` at that tracked source instead of the installed copy.
+
+Create or repair it with:
 
 ```bash
-bunx cap add android && bun run android:prep   # or just: bun run cap:add:android
+bun run cap:add:android   # first time on a machine: cap add android + overlay
+bun run android:prep      # any time after: re-apply the overlay
 ```
 
 `tools/android-overlay.mjs` then deletes the stock resources that would
 otherwise override the plugin's (Capacitor icon, stock splash, purple
-`styles.xml`, stock `file_paths.xml`) and re-asserts arm64-only + JDK 21 in
-`app/build.gradle`. App-module resources beat library resources, so without
-this step you would silently ship the template's icon and theme.
+`styles.xml`, stock `file_paths.xml`) and re-asserts SDK 36, AGP 8.13, the
+Kotlin/Chaquopy plugin classpaths, the Gradle wrapper, arm64-only + JDK 21.
+App-module resources beat library resources, so without this step you would
+silently ship the template's icon and theme.
 
 ## Known scope notes
 
@@ -200,7 +235,57 @@ this step you would silently ship the template's icon and theme.
 
 ---
 
-## If Android shows a black / blank screen
+## Building the Android app (step by step)
+
+Prerequisites: **JDK 21** and **Android SDK Platform 36**
+(`sdkmanager "platforms;android-36"`).
+
+```bash
+# 1. dependencies — postinstall also reconciles android/
+bun install
+
+# 2. web bundle → dist/
+bun run build
+
+# 3. FIRST TIME on this machine only: create the platform folder
+bun run cap:add:android
+
+# 4. copy dist/ into the platform + reconcile SDK/AGP/plugins/wrapper
+bun run cap:sync
+
+# 5. sanity check — expect no output
+bun run android:check
+
+# 6. build the debug APK (overlay + gradle in one command)
+bun run android:build
+
+# 7. install and watch startup
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb logcat -s SurgeBoot Capacitor CapacitorConsole AndroidRuntime chromium
+```
+
+`bun run android:build` is shorthand for:
+
+```bash
+bun run android:prep
+cd android && ./gradlew clean :app:assembleDebug
+```
+
+> **Always `clean` after changing SDK / AGP / plugins.** Gradle will happily install a
+> stale APK whose WebView code no longer matches the Kotlin plugins.
+
+`SurgeBoot` lines tell you how far startup got: `MainActivity.onCreate` →
+`bridge activity created` → `DownloadService.onCreate` → `DownloadService ready`.
+If it stops between two of those, that gap is your bug.
+
+Prefer Android Studio? `bun run android:prep && bun run android:open`, then press Run.
+Release bundle: `bun run android:bundle` → `android/app/build/outputs/bundle/release/`.
+
+---
+
+## Troubleshooting
+
+### App starts, but the screen is black / blank
 
 Launch failures are almost always one of these five. Work top-down:
 
@@ -223,35 +308,14 @@ adb logcat -s Capacitor CapacitorConsole AndroidRuntime chromium System.out
 | 9 | Build fails, stale APK runs | Fabricated `yt-dlp==2026.10.15` pin; Capacitor includes in wrong Gradle file; missing palette dep | real pin `2024.11.18`; includes in `settings.gradle`; `palette-ktx` added |
 | 10 | UI under status bar / gesture pill | WebView reports `env(safe-area-inset-*)` as 0 | `SafeAreaPlugin` → `--sat/--sab/--sal/--sar/--sak` |
 
-### Rebuild checklist (do these in order)
-
-```bash
-npm install                 # Capacitor + plugins must exist before sync
-npm run build               # produces dist/
-npx cap sync android        # copies dist/ into android/app/src/main/assets
-# drop your prebuilt arm64 binaries in:
-#   android/app/src/main/jniLibs/arm64-v8a/libaria2c.so
-#   android/app/src/main/jniLibs/arm64-v8a/libffmpeg.so
-#   android/app/src/main/jniLibs/arm64-v8a/libffprobe.so
-bun run android:prep        # wrapper + SDK 36 + AGP 8.13 + capacitor.settings.gradle
-cd android && ./gradlew clean :app:assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb logcat -s SurgeBoot Capacitor CapacitorConsole AndroidRuntime chromium
-```
-
-`SurgeBoot` lines tell you how far startup got: `MainActivity.onCreate` →
-`bridge activity created` → `DownloadService.onCreate` → `DownloadService ready`.
-If it stops between two of those, that gap is your bug. Gradle will happily run a
-stale APK whose WebView code no longer matches the Kotlin plugins — always clean.
-
 ### `bash: ./gradlew: No such file or directory`
 
 `cap sync android` **never** creates the Gradle wrapper — only `cap add android`
 does — so a folder provisioned by a bare sync has no `./gradlew`:
 
 ```bash
-npm run build
-bunx cap sync android          # copies web assets + plugins; leaves no wrapper
+bun run build
+bun run cap:sync                # copies web assets + plugins; leaves no wrapper
 cd android && ./gradlew assembleDebug
 # bash: ./gradlew: No such file or directory
 ```
@@ -261,7 +325,7 @@ pinned AGP 8.13 needs) straight out of the Capacitor CLI template that is alread
 in `node_modules`, and upgrades a too-old wrapper if one is already there:
 
 ```bash
-npm run android:prep           # or: bun run cap:sync, which runs it for you
+bun run android:prep           # or: bun run cap:sync, which runs it for you
 cd android && ./gradlew clean :app:assembleDebug
 ```
 
@@ -276,26 +340,26 @@ pull. Two commands tell you the truth:
 
 ```bash
 git log -1 --oneline     # must be the commit that contains the fix
-npm run android:check    # audits the GENERATED project and names what to run
+bun run android:check    # audits the GENERATED project and names what to run
 ```
 
 `android:check` prints lines like these instead of making you guess:
 
 ```
-android/build.gradle is missing org.jetbrains.kotlin:kotlin-gradle-plugin — run: npm run android:prep
-android/app/build.gradle is not on compileSdk 36 — run: npm run android:prep
-:surge-native is wired to a node_modules copy — run: npm run android:prep so Gradle builds the tracked source
-android/gradlew is missing — run: npm run android:prep
+android/build.gradle is missing org.jetbrains.kotlin:kotlin-gradle-plugin — run: bun run android:prep
+android/app/build.gradle is not on compileSdk 36 — run: bun run android:prep
+:surge-native is wired to a node_modules copy — run: bun run android:prep so Gradle builds the tracked source
+android/gradlew is missing — run: bun run android:prep
 ```
 
 Then:
 
 ```bash
-npm install                 # postinstall runs the overlay
+bun install                 # postinstall runs the overlay
 cd android && ./gradlew clean :app:assembleDebug
 ```
 
-`npm run android:prep` also wires `:surge-native` to **`plugins/surge-native/android`**
+`bun run android:prep` also wires `:surge-native` to **`plugins/surge-native/android`**
 (the tracked source) rather than `node_modules/surge-native`, so a stale installed copy can
 never shadow a fix again — and it refreshes that copy if your package manager installed one
 instead of symlinking it.
@@ -316,12 +380,36 @@ Kotlin and Chaquopy are *not* on the Capacitor template's buildscript classpath
 both. The overlay adds them to the generated `android/build.gradle`:
 
 ```bash
-npm install            # postinstall runs the overlay automatically
+bun install            # postinstall runs the overlay automatically
 # or explicitly:
-npm run android:prep
+bun run android:prep
 ```
 
 `android/` is generated and git-ignored, so **pulling source alone never changes
 it** — the prep step is what rewrites the folder. If it is still missing after
 that, the plugin module now fails with that exact instruction instead of Gradle's
 cryptic one.
+
+### `Could not find method pyc() … on extension 'chaquopy'`
+
+```
+A problem occurred evaluating project ':app'.
+> Could not find method pyc() for arguments […] on extension 'chaquopy'
+```
+
+Chaquopy 17 moved `pyc` **onto `defaultConfig`**, and the `chaquopy` block must be a
+sibling of `android { }`, not nested inside it:
+
+```groovy
+chaquopy {
+    defaultConfig {
+        version '3.11'
+        pip { install 'yt-dlp==2024.11.18' }
+        pyc { src = false }
+    }
+}
+```
+
+Only **one** module may apply `com.chaquo.python` — its docs say it "can only be used in
+one module per app". Surge applies it in `:surge-native` only; the app module must not.
+`bun run verify` fails if both modules apply it again.

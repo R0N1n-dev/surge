@@ -9,7 +9,7 @@
  *   native  → the Kotlin `DownloaderPlugin` (aria2 JSON-RPC + yt-dlp + ffmpeg),
  *             reached over the Capacitor bridge with typed events.
  *   web     → an in-memory simulator that emits the exact same event shapes on
- *             a tick loop. This is what makes `npm run dev` in a desktop browser
+ *             a tick loop. This is what makes `bun run dev` in a desktop browser
  *             a faithful proxy for the device: the same store mutations, the same
  *             progress cadence, the same notification intents (as snackbars).
  *

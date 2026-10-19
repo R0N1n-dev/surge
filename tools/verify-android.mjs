@@ -272,11 +272,11 @@ if (existsSync(resolve(ROOT, CAP))) {
   if (!script('android:run').includes('android-overlay.mjs')) {
     problems.push('package.json: "android:run" does not run the overlay before `cap run`');
   }
-  // `npm install` is the one command everyone runs after pulling; without a
+  // `bun install` is the one command everyone runs after pulling; without a
   // postinstall hook the generated android/ project never gets reconciled and
   // the build fails on a missing plugin classpath.
   if (!script('postinstall').includes('postinstall.mjs')) {
-    problems.push('package.json: no "postinstall" hook — a bare `npm install` leaves android/build.gradle without the Kotlin/Chaquopy classpaths');
+    problems.push('package.json: no "postinstall" hook — a bare `bun install` leaves android/build.gradle without the Kotlin/Chaquopy classpaths');
   }
 }
 
@@ -313,34 +313,34 @@ if (existsSync(resolve(ROOT, CAP))) {
       'com.chaquo.python:gradle',
     ]) {
       if (!rootText.includes(coord)) {
-        problems.push(`android/build.gradle is missing ${coord} — run: npm run android:prep`);
+        problems.push(`android/build.gradle is missing ${coord} — run: bun run android:prep`);
       }
     }
 
     const vars = resolve(ROOT, 'android/variables.gradle');
     if (existsSync(vars) && !readFileSync(vars, 'utf8').includes('compileSdkVersion = 36')) {
-      problems.push('android/variables.gradle is not on compileSdk 36 — run: npm run android:prep');
+      problems.push('android/variables.gradle is not on compileSdk 36 — run: bun run android:prep');
     }
     if (!readFileSync(APP_GRADLE, 'utf8').includes('compileSdk 36')) {
-      problems.push('android/app/build.gradle is not on compileSdk 36 — run: npm run android:prep');
+      problems.push('android/app/build.gradle is not on compileSdk 36 — run: bun run android:prep');
     }
 
     const settings = resolve(ROOT, 'android/capacitor.settings.gradle');
     if (!existsSync(settings)) {
-      problems.push('android/capacitor.settings.gradle is missing — run: npm run android:prep');
+      problems.push('android/capacitor.settings.gradle is missing — run: bun run android:prep');
     } else {
       const s = readFileSync(settings, 'utf8');
       const line = s.split('\n').find((l) => l.includes("project(':surge-native')")) ?? '';
       if (!line.includes('plugins/surge-native')) {
         problems.push(
-          `:surge-native is wired to a node_modules copy (${line.trim() || 'missing'}) — run: npm run android:prep so Gradle builds the tracked source`,
+          `:surge-native is wired to a node_modules copy (${line.trim() || 'missing'}) — run: bun run android:prep so Gradle builds the tracked source`,
         );
       }
     }
 
     for (const w of ['gradlew', 'gradle/wrapper/gradle-wrapper.properties']) {
       if (!existsSync(resolve(ROOT, 'android', w))) {
-        problems.push(`android/${w} is missing — run: npm run android:prep (it unpacks the wrapper from the Capacitor CLI template)`);
+        problems.push(`android/${w} is missing — run: bun run android:prep (it unpacks the wrapper from the Capacitor CLI template)`);
       }
     }
   }

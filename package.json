@@ -19,7 +19,7 @@
     "stores:check": "node tools/verify-stores.mjs --strict",
     "mockup": "node mockup/build-mockup.mjs && node tools/verify-mockup.mjs --strict",
     "icons": "python3 tools/gen-icons.py",
-    "verify": "npm run tokens:check && npm run css:check && node tools/verify-js.mjs --strict && npm run android:check && npm run stores:check",
+    "verify": "node tools/verify-tokens.mjs --strict && node tools/verify-css.mjs --strict && node tools/verify-js.mjs --strict && node tools/verify-android.mjs --strict && node tools/verify-stores.mjs --strict",
     "cap:sync": "cap sync android && node tools/android-overlay.mjs",
     "android:open": "cap open android",
     "android:build": "node tools/android-overlay.mjs && cd android && ./gradlew :app:assembleDebug",

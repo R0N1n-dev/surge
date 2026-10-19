@@ -13,8 +13,8 @@
  *     classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.21'
  *     classpath 'com.chaquo.python:gradle:17.1.0'
  *
- * to android/build.gradle (automatically on `npm install`, and via
- * `npm run android:prep`). Without them Gradle says the famously unhelpful
+ * to android/build.gradle (automatically on `bun install`, and via
+ * `bun run android:prep`). Without them Gradle says the famously unhelpful
  *
  *     Plugin with id 'kotlin-android' not found
  *
@@ -29,9 +29,9 @@ def surgeApplyPlugin = { String id, String coordinate ->
             "\n\nSurge: this module needs the '${id}' Gradle plugin, which comes from\n" +
             "  ${coordinate}\n" +
             "The generated android/build.gradle does not declare it. Fix with:\n\n" +
-            "    npm run android:prep\n\n" +
-            "(that also runs automatically during `npm install`, and via\n" +
-            " `npm run android:build`). Then re-run Gradle.\n", e)
+            "    bun run android:prep\n\n" +
+            "(that also runs automatically during `bun install`, and via\n" +
+            " `bun run android:build`). Then re-run Gradle.\n", e)
     }
 }
 

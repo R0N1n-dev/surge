@@ -22,7 +22,7 @@ const hits = ref([]);
  * — exactly the IDM "grab everything" flow.
  *
  * On the web preview there is no native sniffer, so we seed the same list it
- * would have produced, keeping `npm run dev` faithful.
+ * would have produced, keeping `bun run dev` faithful.
  */
 const DEMO = [
   { url: 'https://releases.ubuntu.com/noble/ubuntu-24.04.3-live-server-arm64.iso', size: 5.84 * 1024 ** 3 },

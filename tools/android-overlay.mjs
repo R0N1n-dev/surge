@@ -20,7 +20,7 @@
  *
  *   node tools/android-overlay.mjs
  *
- * It is wired into `npm run cap:sync` and `npm run cap:add:android` so the
+ * It is wired into `bun run cap:sync` and `bun run cap:add:android` so the
  * normal flow can't forget it.
  */
 
@@ -224,7 +224,7 @@ if (existsSync(GRADLE)) {
  * "still failing after you fixed it" loop.
  *
  * Mirror the parts that carry build logic + Kotlin + resources, and tell the
- * user so they can `rm -rf node_modules && npm install` at their leisure.
+ * user so they can `rm -rf node_modules && bun install` at their leisure.
  */
 {
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
@@ -266,7 +266,7 @@ if (existsSync(GRADLE)) {
     }
     patched++;
     console.log(`  refreshed      node_modules/${d} (installed as a copy, not a symlink)`);
-    console.log(`                 run \`rm -rf node_modules/${d} && npm install\` to symlink it instead`);
+    console.log(`                 run \`rm -rf node_modules/${d} && bun install\` to symlink it instead`);
   }
 }
 
@@ -460,6 +460,9 @@ function findInTree(dir, name, depth) {
 {
   const proguard = join(ROOT, 'android/app/proguard-rules.pro');
   if (!existsSync(proguard)) {
+    // android/app may not exist yet (fresh clone, before `cap add android`);
+    // writing without mkdir threw ENOENT and aborted the whole overlay.
+    mkdirSync(dirname(proguard), { recursive: true });
     writeFileSync(proguard, '# Surge keeps its own rules in the plugin module.\n-keep class com.surge.downloader.** { *; }\n', 'utf8');
     patched++;
     console.log('  created        android/app/proguard-rules.pro');
