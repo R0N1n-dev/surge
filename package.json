@@ -12,6 +12,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "tokens": "node tools/gen-css.mjs",
+    "postinstall": "node tools/postinstall.mjs",
     "tokens:check": "node tools/verify-tokens.mjs --strict",
     "css:check": "node tools/verify-css.mjs --strict",
     "android:check": "node tools/verify-android.mjs --strict",

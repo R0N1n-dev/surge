@@ -33,10 +33,15 @@ faithful preview, not a drawing. Regenerate with `npm run mockup`.
 > the androidx libraries it pulls in (`androidx.browser:1.9.0`,
 > `androidx.core:1.17.0`) publish AAR metadata that refuses to build unless the
 > consumer compiles against API 36 — a project still on 35 dies at
-> `:app:checkDebugAarMetadata`. Install **SDK Platform 36** in the SDK Manager;
-> `npm run android:prep` pins `compileSdkVersion`/`targetSdkVersion` (36) and the
-> Android Gradle Plugin (8.13) in the generated `android/` folder for you, and
-> `npm run android:check` fails if they drift back.
+> `:app:checkDebugAarMetadata`. Install **SDK Platform 36** in the SDK Manager.
+>
+> `android/` is **generated, not tracked** (see `.gitignore`). `npm install`
+> runs `tools/android-overlay.mjs` as a postinstall step, and `npm run
+> android:prep` does the same on demand: it pins `compileSdkVersion`/
+> `targetSdkVersion` (36), the Android Gradle Plugin (8.13), the **Kotlin and
+> Chaquopy plugin classpaths**, the Gradle wrapper (8.14.3) and
+> `capacitor.settings.gradle` in that folder. `npm run android:check` fails if
+> any of it drifts.
 
 No TypeScript anywhere. Plain JavaScript + Vue SFCs.
 
@@ -262,3 +267,29 @@ cd android && ./gradlew clean :app:assembleDebug
 
 `android:build`, `android:bundle` and `android:run` run the overlay themselves, so
 the repo's own commands can never hit this.
+
+### `Plugin with id 'kotlin-android' not found`
+
+```
+A problem occurred evaluating project ':surge-native'.
+> Plugin with id 'kotlin-android' not found
+```
+
+…usually followed by a bogus `project ':surge-native' does not specify 'compileSdk'`.
+That second message is a **consequence, not a second bug**: evaluation aborts at the
+plugin line, so the `android { compileSdk 36 }` block below it never runs.
+
+Kotlin and Chaquopy are *not* on the Capacitor template's buildscript classpath
+(the template only declares AGP + google-services), and this repo's modules apply
+both. The overlay adds them to the generated `android/build.gradle`:
+
+```bash
+npm install            # postinstall runs the overlay automatically
+# or explicitly:
+npm run android:prep
+```
+
+`android/` is generated and git-ignored, so **pulling source alone never changes
+it** — the prep step is what rewrites the folder. If it is still missing after
+that, the plugin module now fails with that exact instruction instead of Gradle's
+cryptic one.

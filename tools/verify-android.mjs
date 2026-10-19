@@ -27,6 +27,7 @@
  */
 
 import { readFileSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -180,9 +181,19 @@ if (!existsSync(resolve(ROOT, OVERLAY))) {
   for (const rel of MODULES) {
     if (!existsSync(resolve(ROOT, rel))) continue;
     for (const line of read(rel).split('\n')) {
-      const at = line.indexOf('apply plugin:');
-      if (at < 0) continue;
-      const open = line.indexOf(String.fromCharCode(39), at);
+      // Two shapes, both meaningful:
+      //   apply plugin: 'kotlin-android'
+      //   surgeApplyPlugin('kotlin-android', 'org.jetbrains…')   (guarded apply)
+      const guardAt = line.indexOf('surgeApplyPlugin(');
+      const applyAt = line.indexOf('apply plugin:');
+      const marker =
+        guardAt >= 0
+          ? guardAt + 'surgeApplyPlugin('.length
+          : applyAt >= 0
+            ? applyAt + 'apply plugin:'.length
+            : -1;
+      if (marker < 0) continue;
+      const open = line.indexOf(String.fromCharCode(39), marker);
       const close = open < 0 ? -1 : line.indexOf(String.fromCharCode(39), open + 1);
       if (close > open) applied.add(line.slice(open + 1, close));
     }
@@ -245,6 +256,28 @@ if (existsSync(resolve(ROOT, CAP))) {
   }
   if (!script('android:run').includes('android-overlay.mjs')) {
     problems.push('package.json: "android:run" does not run the overlay before `cap run`');
+  }
+  // `npm install` is the one command everyone runs after pulling; without a
+  // postinstall hook the generated android/ project never gets reconciled and
+  // the build fails on a missing plugin classpath.
+  if (!script('postinstall').includes('postinstall.mjs')) {
+    problems.push('package.json: no "postinstall" hook — a bare `npm install` leaves android/build.gradle without the Kotlin/Chaquopy classpaths');
+  }
+}
+
+/* --------------------- 6. android/ must not be a gitlink ------------------ */
+/**
+ * It was tracked as gitlink mode 160000 with no .gitmodules. Consequences: a
+ * clone materialises an EMPTY android/ folder (so `cap add android` refuses with
+ * "platform already exists"), and nothing under it can ever be committed — which
+ * is why `android/gradlew` could never ship.
+ */
+{
+  const r = spawnSync('git', ['ls-files', '-s', 'android'], { cwd: ROOT, encoding: 'utf8' });
+  if ((r.stdout ?? '').trim().startsWith('160000')) {
+    problems.push(
+      'android/ is tracked as a gitlink (160000) with no .gitmodules — clones get an empty folder that blocks `cap add`; run `git rm --cached android`',
+    );
   }
 }
 

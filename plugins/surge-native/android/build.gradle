@@ -4,9 +4,40 @@
 // (it is a file: dependency with a `capacitor.android.src`), and the
 // @CapacitorPlugin annotations below are what make the STOCK BridgeActivity
 // auto-register every plugin - no manual registerPlugin() anywhere.
-apply plugin: 'com.android.library'
-apply plugin: 'kotlin-android'
-apply plugin: 'com.chaquo.python'
+
+/**
+ * AGP comes from the generated android/build.gradle (the Capacitor template
+ * always declares it). Kotlin and Chaquopy DO NOT: the template has no idea a
+ * module uses them, so `tools/android-overlay.mjs` adds
+ *
+ *     classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.21'
+ *     classpath 'com.chaquo.python:gradle:17.1.0'
+ *
+ * to android/build.gradle (automatically on `npm install`, and via
+ * `npm run android:prep`). Without them Gradle says the famously unhelpful
+ *
+ *     Plugin with id 'kotlin-android' not found
+ *
+ * followed by a bogus "does not specify compileSdk" (evaluation aborted before
+ * the android { } block). Replace that pair with an actionable message.
+ */
+def surgeApplyPlugin = { String id, String coordinate ->
+    try {
+        project.apply plugin: id
+    } catch (Exception e) {
+        throw new GradleException(
+            "\n\nSurge: this module needs the '${id}' Gradle plugin, which comes from\n" +
+            "  ${coordinate}\n" +
+            "The generated android/build.gradle does not declare it. Fix with:\n\n" +
+            "    npm run android:prep\n\n" +
+            "(that also runs automatically during `npm install`, and via\n" +
+            " `npm run android:build`). Then re-run Gradle.\n", e)
+    }
+}
+
+surgeApplyPlugin('com.android.library', 'com.android.tools.build:gradle')
+surgeApplyPlugin('kotlin-android', 'org.jetbrains.kotlin:kotlin-gradle-plugin')
+surgeApplyPlugin('com.chaquo.python', 'com.chaquo.python:gradle')
 
 android {
     namespace 'com.surge.downloader'

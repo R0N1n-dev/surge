@@ -168,11 +168,35 @@ if (existsSync(GRADLE)) {
     // (evaluation aborts at the plugin line, before the android { } block runs).
     // Declare them, and never touch a pin that is already present.
     const REQUIRED = [
-      ['org.jetbrains.kotlin:kotlin-gradle-plugin', '2.2.21'],
-      ['com.chaquo.python:gradle', '17.1.0'],
+      // coordinate, version we ship, minimum acceptable existing pin
+      ['org.jetbrains.kotlin:kotlin-gradle-plugin', '2.2.21', [2, 2, 0]],
+      ['com.chaquo.python:gradle', '17.1.0', null],
     ];
-    for (const [coord, version] of REQUIRED) {
-      if (g.includes(`${coord}:`)) continue;
+    const QUOTE = String.fromCharCode(39);
+    for (const [coord, version, floor] of REQUIRED) {
+      const at = g.indexOf(`${coord}:`);
+      if (at >= 0) {
+        // An existing pin is respected UNLESS it predates what our Gradle
+        // wrapper (8.14.3) supports: KGP 1.x simply does not run there, so an
+        // untouched old line would just move the failure one step later.
+        if (!floor) continue;
+        // The coordinate sits INSIDE the quotes, so the opening quote is the
+        // one *before* it (lastIndexOf) and the closing quote is the first one
+        // after it. Searching forward for both grabbed the next line's quote.
+        const open = g.lastIndexOf(QUOTE, at);
+        const close = open < 0 ? -1 : g.indexOf(QUOTE, at);
+        if (close < 0) continue;
+        const cur = g.slice(open + 1, close).slice(coord.length + 1);
+        const parts = cur.split('.').map((n) => parseInt(n, 10));
+        const older =
+          !Number.isFinite(parts[0]) ||
+          parts[0] < floor[0] ||
+          (parts[0] === floor[0] && (parts[1] ?? 0) < floor[1]);
+        if (!older) continue;
+        g = g.slice(0, open + 1) + `${coord}:${version}` + g.slice(close);
+        console.log(`  patched        android/build.gradle (${coord} ${cur} -> ${version})`);
+        continue;
+      }
       const bs = g.indexOf('buildscript');
       const deps = bs < 0 ? -1 : g.indexOf('dependencies', bs);
       const brace = deps < 0 ? -1 : g.indexOf('{', deps);
