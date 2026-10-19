@@ -538,6 +538,30 @@ function findInTree(dir, name, depth) {
   }
 }
 
+/* ------------ 5d-bis. app manifest: our launcher, our resources ----------- */
+/**
+ * The stock Capacitor manifest is not usable with this project's resource set:
+ * it references `AppTheme`, `AppTheme.NoActionBarLaunch` and
+ * `title_activity_main` (all removed by the res sync below) and resolves
+ * `.MainActivity` against the app namespace (com.surge.downloader.app) while the
+ * real class lives in com.surge.downloader. AAPT fails the build with
+ * "resource style/AppTheme not found". Install the maintained manifest instead.
+ */
+{
+  const tpl = join(ROOT, 'tools/templates/app-AndroidManifest.xml');
+  const dst = join(APP, 'AndroidManifest.xml');
+  if (existsSync(tpl)) {
+    const want = readFileSync(tpl, 'utf8');
+    const have = existsSync(dst) ? readFileSync(dst, 'utf8') : null;
+    if (have !== want) {
+      mkdirSync(dirname(dst), { recursive: true });
+      writeFileSync(dst, want, 'utf8');
+      patched++;
+      console.log('  restored       app AndroidManifest.xml (launcher + theme + resource refs)');
+    }
+  }
+}
+
 /* ---------------------- 5d. belt 1: MainActivity registers the plugins ----- */
 /**
  * `cap add android` writes a stock MainActivity with no registrations. Restore

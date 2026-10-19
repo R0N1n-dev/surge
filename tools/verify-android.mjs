@@ -26,9 +26,9 @@
  *   node tools/verify-android.mjs [--strict]
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -306,6 +306,92 @@ if (existsSync(resolve(ROOT, CAP))) {
   }
 }
 
+/* ------------- 8. manifest + resource references must resolve ------------- */
+/**
+ * AAPT fails the build with
+ *   error: resource style/AppTheme not found
+ * when a manifest references something the merged resource set does not define —
+ * which is exactly what a stock Capacitor manifest plus Surge's resource set
+ * produced. Audit it offline instead of waiting for `processDebugResources`.
+ *
+ * The reference set is our manifests + the res XML we ship; the definitions are
+ * plugins/surge-native/android/src/main/res (app res is a copy of it).
+ */
+{
+  const RES = resolve(ROOT, 'plugins/surge-native/android/src/main/res');
+  const defined = new Set();
+  const FILE_TYPES = ['mipmap', 'drawable', 'layout', 'xml', 'raw', 'anim', 'font', 'color', 'menu'];
+  const VALUE_TAGS = ['style', 'string', 'color', 'dimen', 'bool', 'integer', 'string-array', 'integer-array', 'plurals'];
+  const refs = new Map(); // "type/name" -> where it was referenced
+
+  const collectRefs = (text, label) => {
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] !== '@') continue;
+      const rest = text.slice(i + 1);
+      if (rest.startsWith('android:') || rest.startsWith('+') || rest.startsWith('{')) continue;
+      const slash = rest.indexOf('/');
+      if (slash <= 0 || slash > 12) continue;
+      const type = rest.slice(0, slash);
+      let ok = true;
+      for (const ch of type) if (!(ch >= 'a' && ch <= 'z')) ok = false;
+      if (!ok) continue;
+      let j = slash + 1;
+      let name = '';
+      while (j < rest.length) {
+        const ch = rest[j];
+        const id =
+          (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+          (ch >= '0' && ch <= '9') || ch === '_' || ch === '.';
+        if (!id) break;
+        name += ch;
+        j++;
+      }
+      if (name) refs.set(`${type}/${name}`, label);
+    }
+  };
+
+  const walk = (dir, labelPrefix) => {
+    if (!existsSync(dir)) return;
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) {
+        walk(p, labelPrefix);
+        continue;
+      }
+      const rel = p.slice(RES.length + 1).split('\\').join('/');
+      const type = rel.split('/')[0].split('-')[0];
+      const dot = e.name.lastIndexOf('.');
+      const base = dot > 0 ? e.name.slice(0, dot) : e.name;
+      if (type === 'values' && e.name.endsWith('.xml')) {
+        const text = readFileSync(p, 'utf8');
+        for (const tag of VALUE_TAGS) {
+          const needle = `<${tag} name="`;
+          let at = 0;
+          while ((at = text.indexOf(needle, at)) >= 0) {
+            at += needle.length;
+            const end = text.indexOf('"', at);
+            if (end < 0) break;
+            defined.add(`${tag}/${text.slice(at, end)}`);
+          }
+        }
+      } else if (FILE_TYPES.includes(type)) {
+        defined.add(`${type}/${base}`);
+        if (e.name.endsWith('.xml')) collectRefs(readFileSync(p, 'utf8'), `${labelPrefix}/${rel}`);
+      }
+    }
+  };
+  walk(RES, 'plugins/surge-native/android/src/main/res');
+
+  for (const rel of ['tools/templates/app-AndroidManifest.xml', 'plugins/surge-native/android/src/main/AndroidManifest.xml']) {
+    if (existsSync(resolve(ROOT, rel))) collectRefs(read(rel), rel);
+  }
+
+  for (const [ref, where] of refs) {
+    if (defined.has(ref)) continue;
+    problems.push(`${where}: @${ref} is not provided by plugins/surge-native/.../res — AAPT will fail with "resource ${ref} not found"`);
+  }
+}
+
 /* --------------- 7. on-machine reconciliation (only if android/ exists) --- */
 /**
  * CI has no android/ folder; a developer machine does. When it is present, audit
@@ -359,6 +445,14 @@ if (existsSync(resolve(ROOT, CAP))) {
       if (!existsSync(resolve(ROOT, 'android', w))) {
         problems.push(`android/${w} is missing — run: bun run android:prep (it unpacks the wrapper from the Capacitor CLI template)`);
       }
+    }
+
+    // The stock Capacitor manifest references resources we remove; only the
+    // maintained one links against Surge's resource set.
+    const MANIFEST = resolve(ROOT, 'android/app/src/main/AndroidManifest.xml');
+    const TPL = resolve(ROOT, 'tools/templates/app-AndroidManifest.xml');
+    if (existsSync(MANIFEST) && existsSync(TPL) && readFileSync(MANIFEST, 'utf8') !== readFileSync(TPL, 'utf8')) {
+      problems.push('android/app/src/main/AndroidManifest.xml is still the stock Capacitor one — run: bun run android:prep (its @style/@string refs do not exist, AAPT fails)');
     }
   }
 }

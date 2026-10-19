@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Surge — app manifest (MAINTAINED; installed by tools/android-overlay.mjs).
+
+  It is not left to the Capacitor template because the stock version references
+  resources this project removes and resolves the launcher against the wrong
+  package:
+
+    style/AppTheme                    -> gone (plugin provides AppTheme.NoActionBar)
+    style/AppTheme.NoActionBarLaunch   -> gone (plugin provides AppTheme.Launch)
+    string/title_activity_main         -> gone (the plugin's strings.xml replaces it)
+    .MainActivity                      -> com.surge.downloader.app.MainActivity, but
+                                          the real class is com.surge.downloader.MainActivity
+
+  That combination fails AAPT with "resource style/AppTheme not found" and a
+  couple of siblings. Everything referenced below is provided by
+  plugins/surge-native/android/src/main/res, so the merged resource set is
+  self-consistent.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme.NoActionBar">
+
+        <!-- Fully qualified: the app module's namespace is com.surge.downloader.app,
+             so ".MainActivity" would point at a class that does not exist. -->
+        <activity
+            android:name="com.surge.downloader.MainActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:launchMode="singleTask"
+            android:theme="@style/AppTheme.Launch">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+
+    <uses-permission android:name="android.permission.INTERNET" />
+</manifest>

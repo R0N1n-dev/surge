@@ -84,8 +84,15 @@ android {
 // ---------------------------------------------------------------------------
 chaquopy {
     defaultConfig {
-        // 3.11: supported by Chaquopy 17.1 and by yt-dlp (3.8 is not any more).
-        version '3.11'
+        // 3.10: Chaquopy 17.1 supports it, yt-dlp supports it, and it matches the
+        // `python3` on the build machine (see buildPython below).
+        version '3.10'
+        // Chaquopy runs pip on the BUILD machine with this interpreter, and its
+        // check_build_python.py REQUIRES buildPython's major.minor to equal
+        // `version` exactly (it exits with "it is version X" otherwise). Naming
+        // it explicitly gives a clearer error than "Couldn't find Python 3.10",
+        // and 3.10 is present on virtually every dev box / CI image.
+        buildPython 'python3'
         pip {
             // Pure-Python packages: no native wheel needed, so any release
             // installs. Kept current because site extractors (Instagram,

@@ -34,7 +34,7 @@ than a drawing. Regenerate with `bun run mockup`.
 | **bun** | ≥ 1.4 | package manager + script runner; this is the supported path |
 | JDK | **21** | AGP 8.13 targets `compileSdk 36` |
 | Android SDK Platform | **36** | Capacitor 8's androidx AARs refuse to build against 35 |
-| Python | 3.11 | only for `tools/gen-icons.py` (asset generation) |
+| Python | **3.10** | Chaquopy runs `pip` during the build (its `buildPython` must match `version`) and `tools/gen-icons.py` needs it |
 
 > **SDK Platform 36 is mandatory.** `androidx.browser:1.9.0` and
 > `androidx.core:1.17.0` publish AAR metadata that requires API 36; on 35 the
@@ -417,3 +417,49 @@ chaquopy {
 Only **one** module may apply `com.chaquo.python` — its docs say it "can only be used in
 one module per app". Surge applies it in `:surge-native` only; the app module must not.
 `bun run verify` fails if both modules apply it again.
+
+### `AAPT: error: resource style/AppTheme not found`
+
+Three resources, all referenced by the **stock Capacitor** manifest:
+
+```
+resource style/AppTheme not found
+resource style/AppTheme.NoActionBarLaunch not found
+resource string/title_activity_main not found
+```
+
+The plugin's `themes.xml` / `strings.xml` replace those resources, and `.MainActivity`
+resolves against the app namespace (`com.surge.downloader.app`) while the real class is
+`com.surge.downloader.MainActivity`. The overlay installs a maintained manifest that only
+references what Surge ships:
+
+```bash
+bun run android:prep
+```
+
+`bun run android:check` compares the installed manifest with
+`tools/templates/app-AndroidManifest.xml` and fails if it is still the stock one. Every
+`@style` / `@string` / `@mipmap` reference is also validated offline against the plugin's
+resources, so this class of failure is caught by `bun run verify`.
+
+### `Couldn't find Python 3.10` / `is not a valid Python 3.10 command`
+
+Chaquopy runs `pip` on the **build machine**, and its `check_build_python.py` requires the
+build Python's major.minor to equal the target `version` **exactly**
+(`sys.exit("it is version X")`). This repo targets **3.10** with `buildPython 'python3'`:
+
+```bash
+python3 --version      # must print 3.10.x
+```
+
+If it prints something else, either install 3.10 (`sudo apt install python3.10`) or make
+both numbers match what you have, in `plugins/surge-native/android/build.gradle`:
+
+```groovy
+chaquopy {
+    defaultConfig {
+        version '3.12'        // ← same major.minor as `python3 --version`
+        buildPython 'python3'
+    }
+}
+```
