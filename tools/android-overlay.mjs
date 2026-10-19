@@ -37,6 +37,22 @@ const RES = join(APP, 'res');
 let removed = 0;
 let patched = 0;
 
+/* --------------------------- 0. is there a platform? --------------------- */
+/**
+ * `android/` is generated, so on a fresh clone it legitimately does not exist.
+ * Every step below writes into it, and the first write used to throw ENOENT —
+ * which aborted the overlay and turned `bun install` red for a reason that has
+ * nothing to do with installing dependencies.
+ *
+ * Exit cleanly instead; `bun run android:prep` (tools/ensure-android.mjs) is the
+ * command that creates the platform first and then runs this overlay.
+ */
+if (!existsSync(join(ROOT, 'android/settings.gradle'))) {
+  console.log('  android/ platform not created yet — nothing to reconcile.');
+  console.log('  Create + reconcile it with:  bun run android:prep');
+  process.exit(0);
+}
+
 /* ------------------------------------------------ 1. delete stock clashes -- */
 
 const CONFLICTS = [

@@ -11,10 +11,10 @@ Replaces IDM+/1DM-class apps with a modern, token-driven Material 3 UI.
 ## Quick start (bun)
 
 ```bash
-bun install              # deps + postinstall (reconciles android/ when it exists)
-bun run build            # production bundle → dist/
-bun run cap:add:android  # FIRST TIME on this machine only: create android/
-bun run android:build    # overlay + ./gradlew :app:assembleDebug
+bun install           # deps (postinstall reconciles android/ if it exists)
+bun run build         # production bundle → dist/
+bun run android:prep  # creates android/ if missing, then pins SDK 36 / AGP / classpaths
+bun run android:build # prepare + ./gradlew clean :app:assembleDebug
 ```
 
 Stuck? `bun run android:check` audits the generated `android/` folder and prints the exact
@@ -52,8 +52,8 @@ No TypeScript anywhere. Plain JavaScript + Vue SFCs.
 | `bun run build` | Production bundle into `dist/` |
 | `bun run verify` | Every gate: tokens, CSS, JS, Android toolchain, stores |
 | `bun run android:check` | Audits the **generated** `android/` folder and names the fix |
-| `bun run android:prep` | Re-applies SDK 36 / AGP 8.13 / plugin classpaths / wrapper |
-| `bun run cap:add:android` | First-time `cap add android` + overlay |
+| `bun run android:prep` | **Create `android/` if missing**, then pin SDK 36 / AGP 8.13 / classpaths / wrapper |
+| `bun run cap:add:android` | Alias of `android:prep` (kept for muscle memory) |
 | `bun run cap:sync` | `cap sync android` + overlay |
 | `bun run android:build` | Overlay + debug APK |
 | `bun run android:run` | Overlay + `cap run android` |
@@ -211,11 +211,11 @@ it to `capacitor.settings.gradle` + `assets/capacitor.plugins.json`, the **stock
 `BridgeActivity` auto-registers every `@CapacitorPlugin`, and the overlay points
 `:surge-native` at that tracked source instead of the installed copy.
 
-Create or repair it with:
+Create or repair it with one command — it runs `cap add android` when the folder is
+missing and then reconciles everything:
 
 ```bash
-bun run cap:add:android   # first time on a machine: cap add android + overlay
-bun run android:prep      # any time after: re-apply the overlay
+bun run android:prep
 ```
 
 `tools/android-overlay.mjs` then deletes the stock resources that would
@@ -247,10 +247,10 @@ bun install
 # 2. web bundle → dist/
 bun run build
 
-# 3. FIRST TIME on this machine only: create the platform folder
-bun run cap:add:android
+# 3. create android/ if missing + reconcile SDK/AGP/plugins/wrapper
+bun run android:prep
 
-# 4. copy dist/ into the platform + reconcile SDK/AGP/plugins/wrapper
+# 4. copy dist/ into the platform and re-apply the overlay
 bun run cap:sync
 
 # 5. sanity check — expect no output
@@ -358,6 +358,10 @@ Then:
 bun install                 # postinstall runs the overlay
 cd android && ./gradlew clean :app:assembleDebug
 ```
+
+Fresh machine, nothing built yet? `bun install` printing
+`android/ platform not created yet — nothing to reconcile.` is **normal** — the folder has
+not been generated yet. `bun run android:prep` creates it.
 
 `bun run android:prep` also wires `:surge-native` to **`plugins/surge-native/android`**
 (the tracked source) rather than `node_modules/surge-native`, so a stale installed copy can

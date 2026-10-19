@@ -42,6 +42,7 @@ const MIN_API = 36;
 const MIN_AGP = [8, 13, 0];
 
 const problems = [];
+const notes = [];
 const read = (rel) => readFileSync(resolve(ROOT, rel), 'utf8');
 
 /** Leading integer in `s`, or null. No regex, by design. */
@@ -264,13 +265,22 @@ if (existsSync(resolve(ROOT, CAP))) {
   let pkg = { scripts: {} };
   try { pkg = JSON.parse(read('package.json')); } catch { /* reported below */ }
   const script = (k) => pkg.scripts?.[k] ?? '';
+  // `ensure-android.mjs` creates/reconciles the platform and then runs the
+  // overlay; either entry point satisfies "reconcile before gradle".
+  const reconciles = (k) => {
+    const s = script(k);
+    return s.includes('ensure-android.mjs') || s.includes('android-overlay.mjs');
+  };
   for (const key of ['android:build', 'android:bundle']) {
-    if (!script(key).includes('android-overlay.mjs')) {
-      problems.push(`package.json: "${key}" runs gradle without the overlay first — no gradlew means "No such file or directory"`);
+    if (!reconciles(key)) {
+      problems.push(`package.json: "${key}" runs gradle without preparing android/ first — no gradlew means "No such file or directory"`);
     }
   }
-  if (!script('android:run').includes('android-overlay.mjs')) {
-    problems.push('package.json: "android:run" does not run the overlay before `cap run`');
+  if (!reconciles('android:run')) {
+    problems.push('package.json: "android:run" does not prepare android/ before `cap run`');
+  }
+  if (!script('android:prep').includes('ensure-android.mjs')) {
+    problems.push('package.json: "android:prep" must use tools/ensure-android.mjs so it can CREATE android/ when missing');
   }
   // `bun install` is the one command everyone runs after pulling; without a
   // postinstall hook the generated android/ project never gets reconciled and
@@ -303,8 +313,15 @@ if (existsSync(resolve(ROOT, CAP))) {
  * It names the exact missing piece and the one command that repairs it.
  */
 {
+  const SETTINGS = resolve(ROOT, 'android/settings.gradle');
   const APP_GRADLE = resolve(ROOT, 'android/app/build.gradle');
-  if (existsSync(APP_GRADLE)) {
+  if (!existsSync(SETTINGS)) {
+    // CI has no platform folder; a developer machine may not either yet. Say so
+    // without failing — `bun run android:prep` creates it.
+    notes.push('android/ not created on this machine yet — run: bun run android:prep (creates + reconciles it)');
+  } else if (!existsSync(APP_GRADLE)) {
+    problems.push('android/app/build.gradle is missing — the platform looks half-provisioned; run: rm -rf android && bun run android:prep');
+  } else {
     const rootGradle = resolve(ROOT, 'android/build.gradle');
     const rootText = existsSync(rootGradle) ? readFileSync(rootGradle, 'utf8') : '';
     for (const coord of [
@@ -354,6 +371,10 @@ console.log(`  modules checked  ${MODULES.length}  (target API ${MIN_API})`);
 console.log(`  sdk assertions   ${assertions}`);
 console.log(`  capacitor sdk    ${capApi ?? 'n/a (node_modules not installed)'}`);
 console.log('='.repeat(72));
+if (notes.length) {
+  console.log('\nNOTE:');
+  for (const n of notes) console.log('  · ' + n);
+}
 if (problems.length) {
   console.log(`\n${problems.length} PROBLEM(S):`);
   for (const p of [...new Set(problems)]) console.log('  · ' + p);

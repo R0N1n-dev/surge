@@ -20,13 +20,13 @@
     "mockup": "node mockup/build-mockup.mjs && node tools/verify-mockup.mjs --strict",
     "icons": "python3 tools/gen-icons.py",
     "verify": "node tools/verify-tokens.mjs --strict && node tools/verify-css.mjs --strict && node tools/verify-js.mjs --strict && node tools/verify-android.mjs --strict && node tools/verify-stores.mjs --strict",
-    "cap:sync": "cap sync android && node tools/android-overlay.mjs",
+    "cap:sync": "node tools/ensure-android.mjs && cap sync android && node tools/android-overlay.mjs",
     "android:open": "cap open android",
-    "android:build": "node tools/android-overlay.mjs && cd android && ./gradlew :app:assembleDebug",
-    "android:bundle": "node tools/android-overlay.mjs && cd android && ./gradlew :app:bundleRelease",
-    "android:run": "node tools/android-overlay.mjs && cap run android",
-    "cap:add:android": "cap add android && node tools/android-overlay.mjs",
-    "android:prep": "node tools/android-overlay.mjs"
+    "android:build": "node tools/ensure-android.mjs && cd android && ./gradlew clean :app:assembleDebug",
+    "android:bundle": "node tools/ensure-android.mjs && cd android && ./gradlew :app:bundleRelease",
+    "android:run": "node tools/ensure-android.mjs && cap run android",
+    "cap:add:android": "node tools/ensure-android.mjs",
+    "android:prep": "node tools/ensure-android.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
