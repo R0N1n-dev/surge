@@ -281,6 +281,56 @@ if (existsSync(resolve(ROOT, CAP))) {
   }
 }
 
+/* --------------- 7. on-machine reconciliation (only if android/ exists) --- */
+/**
+ * CI has no android/ folder; a developer machine does. When it is present, audit
+ * the GENERATED project as well — this is the "why does it still fail?" check.
+ * It names the exact missing piece and the one command that repairs it.
+ */
+{
+  const APP_GRADLE = resolve(ROOT, 'android/app/build.gradle');
+  if (existsSync(APP_GRADLE)) {
+    const rootGradle = resolve(ROOT, 'android/build.gradle');
+    const rootText = existsSync(rootGradle) ? readFileSync(rootGradle, 'utf8') : '';
+    for (const coord of [
+      'com.android.tools.build:gradle',
+      'org.jetbrains.kotlin:kotlin-gradle-plugin',
+      'com.chaquo.python:gradle',
+    ]) {
+      if (!rootText.includes(coord)) {
+        problems.push(`android/build.gradle is missing ${coord} — run: npm run android:prep`);
+      }
+    }
+
+    const vars = resolve(ROOT, 'android/variables.gradle');
+    if (existsSync(vars) && !readFileSync(vars, 'utf8').includes('compileSdkVersion = 36')) {
+      problems.push('android/variables.gradle is not on compileSdk 36 — run: npm run android:prep');
+    }
+    if (!readFileSync(APP_GRADLE, 'utf8').includes('compileSdk 36')) {
+      problems.push('android/app/build.gradle is not on compileSdk 36 — run: npm run android:prep');
+    }
+
+    const settings = resolve(ROOT, 'android/capacitor.settings.gradle');
+    if (!existsSync(settings)) {
+      problems.push('android/capacitor.settings.gradle is missing — run: npm run android:prep');
+    } else {
+      const s = readFileSync(settings, 'utf8');
+      const line = s.split('\n').find((l) => l.includes("project(':surge-native')")) ?? '';
+      if (!line.includes('plugins/surge-native')) {
+        problems.push(
+          `:surge-native is wired to a node_modules copy (${line.trim() || 'missing'}) — run: npm run android:prep so Gradle builds the tracked source`,
+        );
+      }
+    }
+
+    for (const w of ['gradlew', 'gradle/wrapper/gradle-wrapper.properties']) {
+      if (!existsSync(resolve(ROOT, 'android', w))) {
+        problems.push(`android/${w} is missing — run: npm run android:prep (it unpacks the wrapper from the Capacitor CLI template)`);
+      }
+    }
+  }
+}
+
 /* ------------------------------------------------------------- report ----- */
 
 console.log('Surge Android toolchain audit');

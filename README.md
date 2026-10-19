@@ -268,6 +268,38 @@ cd android && ./gradlew clean :app:assembleDebug
 `android:build`, `android:bundle` and `android:run` run the overlay themselves, so
 the repo's own commands can never hit this.
 
+### Checking your checkout (do this first when something "still fails")
+
+`android/` is **generated**, so pulling source never changes it — and if Gradle is pointed
+at a stale copy of the plugin, it will keep reporting the same error however many times you
+pull. Two commands tell you the truth:
+
+```bash
+git log -1 --oneline     # must be the commit that contains the fix
+npm run android:check    # audits the GENERATED project and names what to run
+```
+
+`android:check` prints lines like these instead of making you guess:
+
+```
+android/build.gradle is missing org.jetbrains.kotlin:kotlin-gradle-plugin — run: npm run android:prep
+android/app/build.gradle is not on compileSdk 36 — run: npm run android:prep
+:surge-native is wired to a node_modules copy — run: npm run android:prep so Gradle builds the tracked source
+android/gradlew is missing — run: npm run android:prep
+```
+
+Then:
+
+```bash
+npm install                 # postinstall runs the overlay
+cd android && ./gradlew clean :app:assembleDebug
+```
+
+`npm run android:prep` also wires `:surge-native` to **`plugins/surge-native/android`**
+(the tracked source) rather than `node_modules/surge-native`, so a stale installed copy can
+never shadow a fix again — and it refreshes that copy if your package manager installed one
+instead of symlinking it.
+
 ### `Plugin with id 'kotlin-android' not found`
 
 ```

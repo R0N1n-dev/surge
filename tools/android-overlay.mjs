@@ -24,7 +24,7 @@
  * normal flow can't forget it.
  */
 
-import { existsSync, rmSync, readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, chmodSync } from 'node:fs';
+import { existsSync, rmSync, readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, chmodSync, realpathSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { dirname, resolve, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -215,6 +215,61 @@ if (existsSync(GRADLE)) {
   }
 }
 
+/* ------------- 3b. refresh an installed COPY of the local plugin ---------- */
+/**
+ * If `node_modules/<plugin>` is a real directory it is a snapshot taken at
+ * install time, not a symlink to plugins/. Anything that re-points Gradle at it
+ * (a bare `cap sync` rewrites capacitor.settings.gradle) would then compile the
+ * stale copy and resurrect already-fixed bugs — which is precisely the
+ * "still failing after you fixed it" loop.
+ *
+ * Mirror the parts that carry build logic + Kotlin + resources, and tell the
+ * user so they can `rm -rf node_modules && npm install` at their leisure.
+ */
+{
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const locals = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })
+    .filter((d) => !d.startsWith('@capacitor/'))
+    .filter((d) => existsSync(join(ROOT, 'plugins', d)) && existsSync(join(ROOT, 'node_modules', d)));
+
+  const mirror = (from, to) => {
+    mkdirSync(to, { recursive: true });
+    for (const e of readdirSync(from, { withFileTypes: true })) {
+      const s = join(from, e.name);
+      const d = join(to, e.name);
+      if (e.isDirectory()) mirror(s, d);
+      else {
+        mkdirSync(dirname(d), { recursive: true });
+        writeFileSync(d, readFileSync(s));
+      }
+    }
+  };
+
+  for (const d of locals) {
+    const src = join(ROOT, 'plugins', d);
+    const dst = join(ROOT, 'node_modules', d);
+    let same = false;
+    try {
+      same = realpathSync(src) === realpathSync(dst);
+    } catch {
+      same = false;
+    }
+    if (same) continue; // a symlink (the normal case) — nothing to do
+    for (const part of ['android/build.gradle', 'android/src/main']) {
+      const f = join(src, part);
+      if (!existsSync(f)) continue;
+      if (statSync(f).isDirectory()) mirror(f, join(dst, part));
+      else {
+        mkdirSync(dirname(join(dst, part)), { recursive: true });
+        writeFileSync(join(dst, part), readFileSync(f));
+      }
+    }
+    patched++;
+    console.log(`  refreshed      node_modules/${d} (installed as a copy, not a symlink)`);
+    console.log(`                 run \`rm -rf node_modules/${d} && npm install\` to symlink it instead`);
+  }
+}
+
 /* ------------------------------------- 3. capacitor.settings.gradle -------- */
 /**
  * `cap add android` generates capacitor.settings.gradle (the include list for
@@ -246,9 +301,14 @@ const SETTINGS = join(ROOT, 'android/capacitor.settings.gradle');
       }
     } else {
       // local file: plugins (surge-native)
-      const pj = join(ROOT, 'node_modules', d, 'package.json');
+      // Prefer the SOURCE in plugins/ over the installed copy. npm/bun normally
+      // symlink a file: dependency, but some layouts install a COPY — and a copy
+      // goes stale the moment we edit the module. That is exactly how a fixed
+      // build.gradle kept reporting the old "kotlin-android not found" error
+      // from node_modules. Gradle must build the tracked source.
       const direct = join(ROOT, 'plugins', d, 'package.json');
-      const manifest = existsSync(pj) ? pj : existsSync(direct) ? direct : null;
+      const pj = join(ROOT, 'node_modules', d, 'package.json');
+      const manifest = existsSync(direct) ? direct : existsSync(pj) ? pj : null;
       if (!manifest) continue;
       const mp = JSON.parse(readFileSync(manifest, 'utf8'));
       if (!mp.capacitor?.android?.src) continue;
