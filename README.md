@@ -442,6 +442,22 @@ bun run android:prep
 `@style` / `@string` / `@mipmap` reference is also validated offline against the plugin's
 resources, so this class of failure is caught by `bun run verify`.
 
+### `Redeclaration: class MainActivity : BridgeActivity`
+
+```
+e: .../android/app/src/main/java/com/surge/downloader/MainActivity.kt:13:7 Redeclaration:
+class MainActivity : BridgeActivity
+class MainActivity : BridgeActivity
+```
+
+`cap add android` **rewrites the template's package to your appId**, so the stock Java
+activity lands at `android/app/src/main/java/com/surge/downloader/MainActivity.java` —
+the exact same fully-qualified name as the Kotlin activity Surge installs. Kotlin sees
+two classes with one name.
+
+`bun run android:prep` deletes the stock Java copy (Surge never ships Java), and
+`bun run android:check` fails if both files are present again.
+
 ### `Couldn't find Python 3.10` / `is not a valid Python 3.10 command`
 
 Chaquopy runs `pip` on the **build machine**, and its `check_build_python.py` requires the

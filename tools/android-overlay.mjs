@@ -567,8 +567,42 @@ function findInTree(dir, name, depth) {
  * `cap add android` writes a stock MainActivity with no registrations. Restore
  * ours (which registers all seven plugins) on every overlay run, so a
  * regenerated platform can never produce "plugin is not implemented" again.
+ *
+ * It also rewrites the template's package to the app's appId, so that stock
+ * activity lands at
+ *
+ *     app/src/main/java/com/surge/downloader/MainActivity.java
+ *
+ * — the SAME fully-qualified name as the Kotlin activity installed below. Kotlin
+ * then fails with "Redeclaration: class MainActivity : BridgeActivity", so the
+ * stock Java copy has to go (we never ship Java).
  */
 {
+  const JAVA_ROOT = join(APP, 'java');
+
+  const removeJavaActivities = (dir) => {
+    if (!existsSync(dir)) return 0;
+    let n = 0;
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) {
+        n += removeJavaActivities(p);
+        continue;
+      }
+      if (e.name === 'MainActivity.java') {
+        rmSync(p, { force: true });
+        n++;
+      }
+    }
+    return n;
+  };
+
+  const gone = removeJavaActivities(JAVA_ROOT);
+  if (gone) {
+    removed += gone;
+    console.log(`  removed stock  ${gone} Java MainActivity (the Kotlin one takes over)`);
+  }
+
   const tpl = join(ROOT, 'tools/templates/MainActivity.kt');
   const dst = join(APP, 'java/com/surge/downloader/MainActivity.kt');
   if (existsSync(tpl)) {

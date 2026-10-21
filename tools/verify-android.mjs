@@ -454,6 +454,23 @@ if (existsSync(resolve(ROOT, CAP))) {
     if (existsSync(MANIFEST) && existsSync(TPL) && readFileSync(MANIFEST, 'utf8') !== readFileSync(TPL, 'utf8')) {
       problems.push('android/app/src/main/AndroidManifest.xml is still the stock Capacitor one — run: bun run android:prep (its @style/@string refs do not exist, AAPT fails)');
     }
+
+    // Exactly one MainActivity may exist. `cap add android` rewrites the
+    // template's package to the appId, so its Java activity collides with our
+    // Kotlin one at the same FQN ("Redeclaration").
+    const activityNames = [];
+    const findActivities = (dir) => {
+      if (!existsSync(dir)) return;
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name);
+        if (e.isDirectory()) findActivities(p);
+        else if (e.name.startsWith('MainActivity.')) activityNames.push(p.slice(ROOT.length + 1));
+      }
+    };
+    findActivities(resolve(ROOT, 'android/app/src/main'));
+    if (activityNames.length > 1) {
+      problems.push(`duplicate MainActivity: ${activityNames.join(' + ')} — run: bun run android:prep (removes the stock Java one)`);
+    }
   }
 }
 
